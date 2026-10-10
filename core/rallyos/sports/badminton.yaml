@@ -50,6 +50,7 @@ scoring:
   next_game_server: winner
   serve_court_by_parity: true    # server's score even -> right service court
 shots:   # explainable rule thresholds
+  serve: {first_hit_of_rally: true}
   smash: {wrist_above_head: true, max_flight_s: 0.6, descent_deg_min: 25}
   clear: {land_zone: rear, apex_over_net_m_min: 3.0}
   drop:  {from_zone: [rear, mid], land_zone: front, min_flight_s: 0.8}

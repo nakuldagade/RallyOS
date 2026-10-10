@@ -52,6 +52,9 @@ export interface MatchEvent {
   px?: XY | null;
   court?: XY | null;
   shot?: string | null;
+  shot_conf?: number | null;
+  shot_why?: string;                  // one sentence: why this label, or why none
+  shot_unchecked?: string[];          // rule conditions that could not be measured (e.g. descent_deg_min)
   speed_kmh?: number | null;
   speed_err_pct?: number | null;
   speed_basis?: string;      // "hit-to-hit" | "hit-to-landing": which two points the average was taken between
@@ -166,6 +169,7 @@ export interface MatchJSON {
     match?: Record<string, number>;
     ball?: BallStats;
     audio?: AudioStats;
+    shots?: { labelled: number; unlabelled: number; why_unlabelled?: Record<string, number>; rules_that_need_bounce_or_wall_data?: string[]; apex?: string } | null;
     pipeline?: {
       device?: string;
       processing_s?: number;

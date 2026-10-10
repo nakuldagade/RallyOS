@@ -193,7 +193,7 @@ function MatchVision() {
             <p className="mb-2 text-xs text-muted">*Speed is the average horizontal speed to the next contact or landing, shown only when both ends are known; it is a lower bound of the shuttle&apos;s peak speed. Hover a dash to see why there is none.</p>
             <table className="w-full text-sm">
               <thead className="text-left text-xs text-muted">
-                <tr><th className="py-2">Time</th><th>Type</th><th>Player</th><th>Shot / call</th><th title="Average horizontal speed from this contact to the next contact or landing, with an error band. The shuttle's real peak speed is higher (it also travels up and down and slows down), so treat this as a lower bound.">Avg speed*</th><th>Confidence</th><th>Source</th></tr>
+                <tr><th className="py-2">Time</th><th>Type</th><th>Player</th><th title="Shot types follow the sport's YAML rules; hover for the reason. A dash means no rule could be checked and matched.">Shot / call</th><th title="Average horizontal speed from this contact to the next contact or landing, with an error band. The shuttle's real peak speed is higher (it also travels up and down and slows down), so treat this as a lower bound.">Avg speed*</th><th>Confidence</th><th>Source</th></tr>
               </thead>
               <tbody>
                 {m.events.map((e) => (
@@ -201,7 +201,12 @@ function MatchVision() {
                     <td className="py-2 font-mono tabular-nums">{fmtTime(e.t)}</td>
                     <td>{e.type}</td>
                     <td>{e.track_id ? name(e.track_id) : "—"}</td>
-                    <td>{e.shot ?? (e.call ? `${e.call} (${pct(e.call_prob)})` : e.note ? <span className="text-xs text-muted">no call</span> : "—")}</td>
+                    <td title={e.shot_why}>
+                      {e.shot ? (
+                        <span>{e.shot} <span className="text-xs text-muted">{pct(e.shot_conf ?? 0)}</span></span>
+                      ) : e.call ? `${e.call} (${pct(e.call_prob)})` : e.note ? <span className="text-xs text-muted">no call</span>
+                        : e.type === "hit" && e.shot_why ? <span className="text-xs text-muted" title={e.shot_why}>—</span> : "—"}
+                    </td>
                     <td className="tabular-nums" title={e.speed_kmh != null ? `Average horizontal speed, ${e.speed_basis}; a lower bound of the shuttle's peak speed` : (e.speed_why_not ?? undefined)}>
                       {speed(e.speed_kmh, e.speed_err_pct)}
                       {e.speed_kmh == null && e.speed_why_not ? <span className="ml-1 text-[10px] text-muted">n/a</span> : null}
