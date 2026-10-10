@@ -73,11 +73,11 @@ The GPU machine **runs** the pretrained models faster. Nothing is trained on it 
 ### Product + 15-hour hackathon build plan (Problem Statement 02, Elevate 1.0)
 
 > **Assumptions** (change any that are wrong):
-> - The team has 4 people.
-> - At least one laptop has an NVIDIA GPU. CPU-only still works, but it's slower and the demo then relies on precomputed results.
+> - **One laptop, one Claude Code builder session.** The 4 team members share this laptop and rotate the human roles in §12. Only this one session writes code, so the build plan runs in order rather than in parallel.
+> - The laptop has no usable GPU. Full-length clips are processed on the Shakti Cloud GPU, which is opened from this same laptop in the browser (runner agent, see "Development setup: two machines").
 > - You're allowed to bring pre-recorded video.
 > - **Badminton** is the main demo sport. It matches the reference image and is a very large grassroots sport in India.
-> - The `EL02/` folder is empty, so everything is built from scratch.
+> - Repo: https://github.com/ELEVATE-1-0/ELEV02 (`main` branch).
 
 ---
 
@@ -429,9 +429,9 @@ flowchart LR
 | Mobile / offline | Installable web app (PWA): offline score keeper (IndexedDB), voice scoring through the browser speech API ("point blue"), upload later when online | Works courtside with poor network |
 | Language model | Claude API: `claude-haiku-5-5` for quick insights, `claude-sonnet-5-5` for the full report; offline fallback = template rules | Grounded write-ups; works offline |
 | Login | Supabase Auth or simple JWT (demo: preset users) | |
-| Hosting | Frontend on Vercel; vision backend on the GPU laptop through Cloudflare Tunnel; Docker image for the product | Free cloud CPUs are too slow for video processing |
+| Hosting | Frontend on Vercel; vision processing on the Shakti Cloud GPU (batch, or Cloudflare Tunnel worker); Docker image for the product | Free cloud CPUs are too slow for video processing |
 
-**Speed target:** a 2-minute clip processed in 3 minutes or less on a laptop GPU.
+**Speed target:** a 2-minute clip processed in 3 minutes or less on the Shakti Cloud GPU.
 - Run YOLO on every frame at 960 px.
 - Run pose on every 2nd frame.
 - Search for the ball at full resolution, but only in the court area.
@@ -610,7 +610,7 @@ web/
 ```
 cd web && npm install && npm run dev        # http://localhost:3000
 ```
-**Priority order for the frontend teammate:**
+**Frontend page priority:**
 1. `matches/[id]`: VideoOverlay, MiniCourt, Scoreboard and RallyTimeline.
 2. `upload`.
 3. `disputes/[id]`.
@@ -673,45 +673,56 @@ Coordinates: `px` = image pixels of the source video; `court` = metres, origin a
 
 `tracks.json`: `{"fps": 60, "frames": [{"f": 0, "players": [{"track_id": 1, "bbox": [x1,y1,x2,y2], "court": [x,y], "kp": [[x,y,c], …17]}], "ball": {"px": [x,y], "court": null, "conf": 0.7, "interp": false}}]}`
 
-**Hour 0:** the builder agent writes this exact example to `data/mock/match.json` and `web/public/mock/match.json`, plus a matching mock `tracks.json` (a few seconds of synthetic motion). The web and api teammates start immediately against these mocks.
+**Hour 0:** the builder agent writes this exact example to `data/mock/match.json` and `web/public/mock/match.json`, plus a matching mock `tracks.json` (a few seconds of synthetic motion). The web and api layers are built against these mocks, so the UI can be demoed before the vision pipeline is finished.
 
 ---
 
-## 12. 15-hour execution plan (4 people)
+## 12. 15-hour execution plan (one laptop, one builder session)
 
-**Roles:**
-- **CV-1:** court + ball.
-- **CV-2:** players, pose, audio, events.
-- **BE:** API, scoring rules, database, rating, AI coach.
-- **FE:** web app, video overlays, pitch visuals.
+Only **one** Claude Code session writes code on this laptop. Never run two coding sessions on this repo at the same time; they would overwrite each other's work. The runner agent on Shakti Cloud only runs code (see "Development setup: two machines").
 
-| Hours | CV-1 | CV-2 | BE | FE |
-|---|---|---|---|---|
-| **0–1** | Repo, environments, download model weights (so it works offline), `match.json` format, sport YAMLs | Collect/record clips (main badminton clip + table tennis / pickleball / tennis frames) | FastAPI skeleton, SQLite models | Next.js shell, mock JSON |
-| **1–4** | Court lines + template fitting + 4-tap fallback + homography checks | YOLO + ByteTrack + pose → court positions, heatmap, distance | Upload, jobs, live progress, scoring rules for all 6 sports (with unit tests) | Upload page, video player with overlay, mini-court view |
-| **4–8** | Ball candidates + player masking + path-finding / Kalman + overlay | Audio hit detection + speed-of-sound correction + hit confirmation + who-hit-it + rally detection | Stats, Glicko-2, sample data, matchmaking, prediction | Rally timeline (with audio waveform), stats cards, player profile |
-| **⛳ H8** | **End-to-end on one clip: upload → court → players → shuttle → rallies → dashboard. Mandatory milestone. If behind, use the cut list.** | | | |
-| **8–11** | Event-timing speed, flight-plane 3D, landing point + uncertainty ellipse, dispute clips | Shot-type rules, split-step, return-to-base, fatigue curve | AI coach with citation check + offline templates, `/predict` explanations | Fair-Play Replay page, coach report (click → clip), courts/booking, tournaments, matchmaking pages |
-| **11–13** | Court Fingerprint on 2nd and 3rd sports (the multi-sport moment), camera-shake correction | Voice scoring, SDK packaging + README + 5-line example | API docs page, verified-match badge (SHA-256), webhook stubs | Coach/academy dashboard, Capture Coach screen, polish, dark theme |
-| **13–14** | **Freeze the code.** Precompute all demo outputs and record a backup screen video of the full demo | | | |
-| **14–15** | Pitch deck (10 slides), 3 timed rehearsals, Q&A prep (limitations, accuracy numbers) | | | |
+**Human roles (the 4 teammates rotate; swap every ~3 hours):**
+- **Driver:** prompts the builder agent, one block at a time, and reviews each diff before it's committed.
+- **Tester:** runs the app and pipeline after every block, writes down bugs, and checks the outputs against the video.
+- **Data and GPU:** records or collects clips, operates the Shakti runner in the browser, copies `demo/out/` folders back, and hand-labels the small evaluation set (§14).
+- **Pitch:** writes seed data content (players, venues, tournaments), the deck, the demo script and Q&A answers, and records the backup demo video.
+
+**Build order (sequential).** Each block ends with tests passing, a commit and a push.
+
+| Hours | Block | What gets built | Done when |
+|---|---|---|---|
+| **0–1** | **B1 Foundation** | git setup, `.gitignore`, `.env.example`, `CLAUDE.md`, requirements files, folder scaffold (§11), 6 sport YAMLs (§5), mock `match.json` + `tracks.json` (§11.3), `device.get_device()`, YAML-driven scoring engine + tests for all 6 sports | `pytest` passes; pushed |
+| **1–3** | **B2 App shell on mocks** | `api/`: models, db, seed, matches router serving the mock, `/media`. `web/`: layout, `matches/[id]` page with VideoOverlay, MiniCourt, Scoreboard, RallyTimeline, StatCards on mock data | Match page renders the mock in the browser |
+| **3–5.5** | **B3 Court + players** | 4-tap calibration first, then automatic court fingerprint (§4.1); camera self-calibration (§4.2); YOLO + ByteTrack + pose → court coordinates, heatmap, distance (§4.8); `python -m rallyos.pipeline` CLI writing `match.json`, `tracks.json`, `overlay.mp4` | Pipeline runs on a short clip on CPU; overlay shows court lines + player IDs |
+| **5.5–8** | **B4 Shuttle + hits + rallies** | Geometric ball tracker (§4.3); audio onsets + speed-of-sound fix + hit fusion + hitter attribution (§4.4); rally segmentation; stats; `api.import_match`; upload page + job progress | **⛳ H8 milestone:** a real clip goes upload → court → players → shuttle → rallies → dashboard |
+| **8–10.5** | **B5 Intelligence** | Event-timing speed (§4.5); shot rules (§4.6); landing call + uncertainty ellipse + dispute clips + SHA-256 (§4.7); return-to-base, split-step, fatigue (§4.8); evidence-linked coach + offline fallback (§4.9); pages `disputes/[id]` and `matches/[id]/report` | Dispute replay and coach report work on the real clip |
+| **10.5–12** | **B6 Network** | Glicko-2 + evidence multiplier, style fingerprint, matchmaking, explainable prediction (§4.10) on seed data; pages `players/[id]`, `coach`, `play`, `courts`, `tournaments` | Rating updates after importing a match; matchmaking + prediction shown |
+| **12–13** | **B7 Multi-sport + SDK** | Court fingerprint on table tennis / pickleball / tennis frames; `sports` page with YAML viewer; SDK packaging (`pip install -e core/`, README, 5-line example); `developers` page; RacketVision plug-in wrapper if the runner has it working | Dropping a second sport's frame switches sport and rules |
+| **13–14** | **Freeze** | No new features. Final GPU processing of every clip, import all outputs, fix only blocking bugs, record the backup demo video | Full §13 demo works from precomputed outputs |
+| **14–15** | **Pitch** | Deck (10 slides), 3 timed rehearsals, Q&A prep (limitations, accuracy numbers from §14) | |
+
+**Runner agent (Shakti GPU) timeline, operated by the Data and GPU person in parallel:**
+- **During B1–B2:** set up the CUDA environment, download YOLO weights, and set up the RacketVision ball tracker in its own venv.
+- **From B3 onward:** after each push, `git pull` and process all clips, then copy `demo/out/` back to the laptop.
 
 **Cut list, in this order, if you're behind:**
 1. Flight-plane 3D (keep event-timing speed).
-2. Automatic court detection (keep 4-tap).
-3. Voice scoring.
-4. Booking UI.
-5. Meetups.
+2. RacketVision plug-in (keep the geometric tracker).
+3. Automatic court detection (keep 4-tap).
+4. Pages `capture` and `score`, plus voice scoring.
+5. Booking UI and meetups.
+6. Webhooks and Mode 2 remote worker.
+7. `courts` and `tournaments` pages (mention them on a slide instead).
 
 **Never cut:**
 - the working end-to-end replay,
-- the dashboard,
+- the match dashboard,
 - the multi-sport config demo.
 
 **Before the hackathon (if allowed):**
 - Record 3–4 badminton rallies at 60 or 120 fps, from a raised position behind the baseline, with exposure locked.
 - Grab short table tennis / pickleball / tennis clips.
-- Pre-install all packages and model weights (venue Wi-Fi is unreliable).
+- Pre-install Python 3.11, Node 18+, ffmpeg and all packages on the laptop (venue Wi-Fi is unreliable).
 
 ---
 
