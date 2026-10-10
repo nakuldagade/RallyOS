@@ -141,3 +141,32 @@ def min_flight_time(d: float, vt: float, v_max: float) -> float:
     """The shortest time any launch up to v_max can take to cover d metres (a flat launch: v(x) = v0 exp(-k x))."""
     k = G / (vt * vt)
     return (math.exp(k * d) - 1.0) / (k * v_max)
+
+
+def trajectory(v0: float, theta: float, T: float, vt: float, dt: float = 1.0 / 60.0) -> list[tuple[float, float, float]]:
+    """(t, dx, dz) every `dt` seconds along one flight with the full model (RK4), ending exactly at T. For drawing a flight."""
+    k = G / (vt * vt)
+    vx, vz, x, z, t = v0 * math.cos(theta), v0 * math.sin(theta), 0.0, 0.0, 0.0
+    out = [(0.0, 0.0, 0.0)]
+
+    def acc(ax, az):
+        s = math.hypot(ax, az)
+        return -k * s * ax, -G - k * s * az
+
+    n = max(1, int(round(T / dt)))
+    h = T / n
+    for i in range(1, n + 1):
+        sub = 4                                            # a few RK4 steps per output step: a fast shot changes a lot in 1/60 s
+        hh = h / sub
+        for _ in range(sub):
+            a1x, a1z = acc(vx, vz)
+            a2x, a2z = acc(vx + 0.5 * hh * a1x, vz + 0.5 * hh * a1z)
+            a3x, a3z = acc(vx + 0.5 * hh * a2x, vz + 0.5 * hh * a2z)
+            a4x, a4z = acc(vx + hh * a3x, vz + hh * a3z)
+            nvx = vx + hh * (a1x + 2 * a2x + 2 * a3x + a4x) / 6.0
+            nvz = vz + hh * (a1z + 2 * a2z + 2 * a3z + a4z) / 6.0
+            x += hh * 0.5 * (vx + nvx)
+            z += hh * 0.5 * (vz + nvz)
+            vx, vz = nvx, nvz
+        out.append((round(i * h, 4), x, z))
+    return out

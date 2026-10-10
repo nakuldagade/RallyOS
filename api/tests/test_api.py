@@ -77,10 +77,8 @@ def test_sports_come_from_core_yaml(client):
     assert client.post("/v1/sports", json={"yaml_text": "not: [valid"}).status_code == 400
 
 
-def test_booking_and_tournament(client):
-    body = {"court_id": 1, "player_id": "p_anika", "slot_start": "2026-11-01T10:00:00", "slot_end": "2026-11-01T11:00:00"}
-    assert client.post("/v1/bookings", json=body).status_code == 201
-    assert client.post("/v1/bookings", json=body).status_code == 409
+def test_there_is_no_booking_api_any_more_and_a_tournament_draw_still_works(client):
+    assert client.post("/v1/bookings", json={}).status_code == 404 and client.get("/v1/courts").status_code == 404
     assert client.post("/v1/tournaments/1/register", json={"player_id": "p_anika"}).status_code == 201
     client.post("/v1/tournaments/1/register", json={"player_id": "p_rohan"})
     draw = client.post("/v1/tournaments/1/draw")

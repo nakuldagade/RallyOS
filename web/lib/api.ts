@@ -2,8 +2,9 @@
 // NEXT_PUBLIC_USE_MOCK=true reads /mock/*.json; otherwise match + tracks fall back to the mock
 // when the backend is unreachable, so the demo never shows a blank page.
 import { getToken } from "./auth";
+import type { Court3DMatch, Scene3DData } from "./court3d";
 import type {
-  AuthUser, Booking, CoachDashboard, HighlightItem, PlayerAnalysis, CourtDetection, CoachReport, CourtRow, DisputeDetail, DrawMatch, Health, MatchJSON, MatchSummary, Player,
+  AuthUser, CoachDashboard, HighlightItem, PlayerAnalysis, CourtDetection, CoachReport, DisputeDetail, DrawMatch, Health, MatchJSON, MatchSummary, Player,
   Prediction, RatingPoint, Score, SportConfig, Suggestion, Tournament, Tracks,
 } from "./types";
 
@@ -72,6 +73,8 @@ const post = (body?: unknown): RequestInit =>
 const q = encodeURIComponent;
 
 export const api = {
+  courts3dMatches: () => request<Court3DMatch[]>("/v1/courts3d/matches"),
+  courts3dScene: (id: string) => request<Scene3DData>(`/v1/courts3d/matches/${encodeURIComponent(id)}`),
   highlights: () => request<{ highlights: HighlightItem[]; matches_without: number }>("/v1/highlights"),
   login: (email: string, password: string, role: "player" | "coach") =>
     request<{ token: string; user: AuthUser }>("/v1/auth/login", post({ email, password, role })),
@@ -97,9 +100,6 @@ export const api = {
   trends: (id: string) => request<{ player_id: string; rating_history: RatingPoint[] }>(`/v1/players/${q(id)}/trends`),
   matchmaking: (id: string, radiusKm = 25) => request<Suggestion[]>(`/v1/matchmaking?player_id=${q(id)}&radius_km=${radiusKm}`),
   predict: (a: string, b: string) => request<Prediction>(`/v1/predict?a=${q(a)}&b=${q(b)}`),
-  courts: (near?: string) => request<CourtRow[]>(`/v1/courts${near ? `?near=${q(near)}` : ""}`),
-  book: (body: { court_id: number; player_id: string; slot_start: string; slot_end: string }) =>
-    request<Booking>("/v1/bookings", post(body)),
   tournaments: () => request<Tournament[]>("/v1/tournaments"),
   register: (tid: number, playerId: string) => request<unknown>(`/v1/tournaments/${tid}/register`, post({ player_id: playerId })),
   draw: (tid: number) => request<DrawMatch[]>(`/v1/tournaments/${tid}/draw`, post()),

@@ -71,8 +71,7 @@ function Play() {
               <>
                 <PredictionBar prediction={prediction.data} nameA={name(a)} nameB={name(b)} />
                 <div className="mt-5 flex flex-wrap gap-2">
-                  <Link href="/courts" className="btn-primary">Book a Smart Court</Link>
-                  <Link href={`/players/${b}`} className="btn-ghost">View {name(b)}</Link>
+                  <Link href={`/players/${b}`} className="btn-primary">View {name(b)}</Link>
                 </div>
               </>
             )}

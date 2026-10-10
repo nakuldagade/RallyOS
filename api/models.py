@@ -119,15 +119,6 @@ class Insight(SQLModel, table=True):
 
 
 # ---- ecosystem tables ----
-class Booking(SQLModel, table=True):
-    id: Optional[int] = Field(default=None, primary_key=True)
-    court_id: int = Field(foreign_key="court.id")
-    player_id: str
-    slot_start: str   # ISO-8601
-    slot_end: str
-    status: str = "confirmed"
-
-
 class Tournament(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     name: str

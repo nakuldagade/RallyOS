@@ -406,21 +406,6 @@ export interface Court {
   smart_court: boolean;
 }
 
-export interface CourtRow {
-  court: Court;
-  venue: Venue;
-  distance_km?: number;
-}
-
-export interface Booking {
-  id: number;
-  court_id: number;
-  player_id: string;
-  slot_start: string;
-  slot_end: string;
-  status: string;
-}
-
 export interface Tournament {
   id: number;
   name: string;
