@@ -121,3 +121,42 @@ def test_template_coach_says_nothing_it_cannot_support():
     del data["stats"]["per_player"]["1"]["avg_return_to_base_s"]
     texts = " ".join(i["text"] for i in coach.template_insights(data))
     assert "recovery" not in texts and "fastest shot" not in texts and "get back to base" not in texts
+
+
+def test_the_job_carries_the_detected_court_from_the_moment_calibration_is_over(tmp_path, monkeypatch):
+    """The upload page draws the detected sport's court as soon as it appears on the job, long before the analysis is done."""
+    import json
+    import sys
+    import types
+
+    from api.config import settings
+    from api.services import jobs
+
+    seen = {}
+    jobs_ref = {}
+
+    from rallyos.pipeline import Analyzer as RealAnalyzer
+
+    class FakeAnalyzer(RealAnalyzer):                                  # keeps the real stage table
+        def __init__(self, **kw):
+            pass
+
+        def run(self, video, out_dir, progress):
+            out = __import__("pathlib").Path(out_dir)
+            progress("calibrate", 0.5, "reading frames")
+            (out / "stage_court.json").write_text(json.dumps({"sport": "squash", "calibrated": False, "sport_source": "auto-detected (Court Fingerprint)",
+                                                              "sport_confidence": 0.8}), encoding="utf-8")
+            progress("calibrate", 1.0, "done")
+            seen["during_calibrate"] = "detected" in jobs_ref["job"]
+            progress("players", 0.0, "loading the pose model")
+            seen["at_next_stage"] = dict(jobs_ref["job"].get("detected") or {})
+            raise NotImplementedError                                 # the job then falls back to the simulated run: enough for this test
+
+    monkeypatch.setitem(sys.modules, "rallyos.pipeline", types.SimpleNamespace(Analyzer=FakeAnalyzer))
+    monkeypatch.setattr(settings, "out_dir", tmp_path)
+    monkeypatch.setattr(jobs, "_simulate", lambda job: job.update(simulated=True, match_id="m_001"))
+    job = {"stages": jobs._fresh_stages(), "taps_given": False, "progress": 0.0, "stage": None, "status": "queued"}
+    jobs_ref["job"] = job
+    jobs._run_locked("j_x", job, tmp_path / "v.mp4", "auto", None, None, "m_det")
+    assert seen["during_calibrate"] is False                          # not before the calibration is over...
+    assert seen["at_next_stage"]["sport"] == "squash" and seen["at_next_stage"]["sport_confidence"] == 0.8   # ...and there when the next stage starts

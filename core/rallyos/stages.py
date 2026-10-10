@@ -110,6 +110,20 @@ def build_scene(*, sport: str, sport_given: bool, taps: list | None, auto_calibr
                  player_poly=player_poly, ball_poly=ball_poly, user_taps=user_taps)
 
 
+def court_summary(scene: Scene) -> dict:
+    """What calibration and detection found, small enough to show the moment they finish (the upload page and the match page draw the
+    detected sport's 3D court and its specifications from this, long before the rest of the analysis is done)."""
+    c, auto = scene.calib, scene.auto or {}
+    return {"sport": scene.sport, "sport_given": scene.sport_given,
+            "sport_confidence": auto.get("sport_confidence") if auto and scene.sport == auto.get("sport") else None,
+            "sport_source": "chosen by user" if scene.sport_given else
+                            ("auto-detected (Court Fingerprint)" if auto and scene.sport == auto.get("sport") else "default (not detected)"),
+            "calibrated": scene.H is not None, "method": c.get("method"), "quality": auto.get("quality") or ("corners given" if scene.H is not None else None),
+            "reprojection_error_px": c.get("reprojection_error_px"), "focal_px": c.get("focal_px"), "camera_position_m": c.get("camera_position_m"),
+            "corners_px": c.get("taps_px") or auto.get("corners_px"), "precision": auto.get("precision"), "note": c.get("note"),
+            "video": {"fps": scene.fps, "width": scene.width, "height": scene.height}}
+
+
 def scene_files(scene: Scene) -> tuple[dict, dict]:
     """(stage_calibration.json, stage_roi.json) contents."""
     pp, bp = scene.player_poly, scene.ball_poly

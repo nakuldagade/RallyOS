@@ -63,3 +63,25 @@ def test_pipeline_end_to_end_without_pose(tmp_path, monkeypatch):
     assert any(abs(e["t"] * 25 - 30) <= 3 for e in m["events"]) or not m["rallies"]  # 1 hit alone is not a rally
     assert len(tracks["frames"]) == 60 and m["video"]["sha256"]
     assert stages[0] == "calibrate" and stages[-1] == "done" and "outcome" in stages
+
+
+def test_the_detected_court_is_written_right_after_calibration_and_before_the_rest(tmp_path, monkeypatch):
+    """stage_court.json exists the moment the calibrate stage ends, so the app can show the detected sport's court at once."""
+    import rallyos.detect.players as players
+    from rallyos.pipeline import Analyzer
+
+    monkeypatch.setattr(players, "load_pose_detector", lambda **kw: (None, "disabled in test"))
+    clip = tmp_path / "clip.mp4"
+    _synthetic_clip(clip, n=30)
+    out = tmp_path / "out"
+    seen = {}
+
+    def progress(stage, frac, note=None):
+        if stage != "calibrate" and "court" not in seen:
+            seen["court"] = json.loads((out / "stage_court.json").read_text(encoding="utf-8"))      # readable when the NEXT stage starts
+
+    Analyzer(sport="badminton", taps=TAPS, match_id="m_c").run(str(clip), out_dir=str(out), progress=progress)
+    c = seen["court"]
+    assert c["sport"] == "badminton" and c["sport_given"] is True and c["calibrated"] is True and c["method"] == "4-tap"
+    assert c["sport_source"] == "chosen by user" and len(c["corners_px"]) == 4 and c["video"]["width"] == 1280
+    assert c["focal_px"] and len(c["camera_position_m"]) == 3

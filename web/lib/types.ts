@@ -383,8 +383,10 @@ export interface SportConfig {
     fingerprint_lines?: string[];
     zones?: Record<string, { y_from_net_m?: [number, number] }>;
   };
-  net?: { height_center?: number; height_post?: number } | null;
-  projectile: { kind: string; size_m: number; bounces?: boolean; motion_model?: string; wall_rebounds?: boolean };
+  net?: { height_center?: number; height_post?: number; overhang_m?: number } | null;
+  walls?: { id: string; plane: string; height_m?: number; material?: string; y_range?: [number, number]; out_line_m?: number; out_line_from_m?: number; out_line_to_m?: number; lines?: { id: string; p1: [number, number]; p2: [number, number] }[] }[];
+  view3d?: { surface?: { out: string; inner: string; line: string }; plane_height_m?: number; legs?: boolean; wall_color?: string; wall_opacity?: number };
+  projectile: { kind: string; size_m: number; bounces?: boolean; motion_model?: string; wall_rebounds?: boolean; terminal_velocity_mps?: number; max_height_m?: number; speed_range_kmh?: [number, number] };
   scoring: { type: string; [k: string]: unknown };
   events?: string[];
   capture?: { min_fps?: number; recommended_fps?: number; camera?: string };
@@ -450,6 +452,24 @@ export interface CourtDetection {
   camera_position_m?: [number, number, number] | null;
 }
 
+/** What calibration and detection found (stage_court.json), available the moment the court stage ends. */
+export interface CourtSummary {
+  sport: string;
+  sport_given: boolean;
+  sport_confidence: number | null;
+  sport_source: string;
+  calibrated: boolean;
+  method: string | null;
+  quality: string | null;
+  reprojection_error_px: number | null;
+  focal_px: number | null;
+  camera_position_m: number[] | null;
+  corners_px: [number, number][] | null;
+  precision: number | null;
+  note: string | null;
+  video: { fps: number; width: number; height: number };
+}
+
 export interface Job {
   job_id: string;
   status: "queued" | "running" | "done" | "failed";
@@ -463,6 +483,7 @@ export interface Job {
   skipped?: string[];
   calibrated?: boolean;
   started?: number;
+  detected?: CourtSummary;      // the court and sport found by calibration, present as soon as that stage is over
 }
 
 export interface Health {

@@ -15,6 +15,7 @@ import { BADMINTON, sportLabel } from "@/lib/sports";
 import type { CourtDetection, SportConfig } from "@/lib/types";
 import { Badge, Card, ErrorBox, PageHeader } from "@/components/ui";
 import LiveDashboard from "@/components/live/LiveDashboard";
+import DetectedCourt from "@/components/court3d/DetectedCourt";
 
 type Pt = [number, number];
 const CORNER_NAMES = ["near-left", "near-right", "far-right", "far-left"];
@@ -369,6 +370,14 @@ export default function CapturePage() {
       {net.pending > 0 && !net.online && (
         <div className="mt-3 rounded-lg border border-amber-500/50 bg-amber-500/10 p-3 text-sm">
           Network is down. Buffered: {net.pending} chunk{net.pending === 1 ? "" : "s"}. Recording continues; the chunks are sent in order as soon as the connection is back, and the numbers catch up.
+        </div>
+      )}
+
+      {state.calibration?.sport && (
+        <div className="mt-4">
+          <DetectedCourt summary={{ sport: state.calibration.sport, calibrated: state.calibration.quality !== "none", quality: state.calibration.quality, method: state.calibration.method ?? null,
+            precision: state.calibration.precision ?? null, corners_px: (state.calibration.corners_px as [number, number][] | null | undefined) ?? null, note: state.calibration.note ?? null,
+            sport_source: "auto-detected on the first chunk", video: camera ? { fps: camera.fps ?? 25, width: camera.w, height: camera.h } : undefined }} />
         </div>
       )}
 

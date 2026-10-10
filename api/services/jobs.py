@@ -3,6 +3,7 @@ demo/out/<match_id>/, then imports the folder so the new match opens in the web 
 Everything runs locally on this machine. If the pipeline raises NotImplementedError (a stage not built) it
 falls back to SIMULATED progress and the mock match, flagged `simulated`."""
 import threading
+import json
 import time
 import uuid
 from pathlib import Path
@@ -111,6 +112,8 @@ def _run_locked(job_id: str, job: dict, video_path: Path, sport: str, taps: Opti
 
         def progress(stage: str, frac: float, note: Optional[str] = None) -> None:
             apply_progress(job, stage, frac, note)
+            if stage != "calibrate" and "detected" not in job and (out / "stage_court.json").is_file():
+                job["detected"] = json.loads((out / "stage_court.json").read_text(encoding="utf-8"))   # court + sport found: show them now
 
         try:
             Analyzer(sport=sport, taps=taps, names=names, match_id=match_id).run(

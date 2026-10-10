@@ -128,3 +128,14 @@ export function shuttleAt(flights: Flight3D[], t: number): { flight: Flight3D; a
   const u = b[0] > a[0] ? (t - a[0]) / (b[0] - a[0]) : 0;
   return { flight: f, index: i, at: [a[1] + (b[1] - a[1]) * u, a[2] + (b[2] - a[2]) * u, a[3] + (b[3] - a[3]) * u] };
 }
+
+
+/** An empty scene (a court and nothing on it) from a sport's YAML, for showing the detected court before any shot is analysed. */
+export function emptyScene(cfg: { sport: string; court: { length: number; width: number; lines: Court3DGeometry["lines"] }; net?: Court3DGeometry["net"] | null;
+  walls?: Court3DGeometry["walls"]; view3d?: Court3DGeometry["view3d"]; projectile?: { size_m?: number } }, id = "preview"): Scene3DData {
+  return {
+    match_id: id, date: "", sport: cfg.sport, fps: 25, duration_s: 1, object_size_m: cfg.projectile?.size_m,
+    court: { length: cfg.court.length, width: cfg.court.width, lines: cfg.court.lines, net: cfg.net ?? {}, walls: cfg.walls, view3d: cfg.view3d },
+    players: [], flights: [], positions: {}, heat: {}, notes: { heights: "", positions: "" },
+  };
+}

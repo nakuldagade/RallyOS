@@ -8,6 +8,7 @@ import { api } from "@/lib/api";
 import { sportLabel } from "@/lib/sports";
 import type { CourtDetection, Job, JobStage, SportConfig } from "@/lib/types";
 import { Badge, Card, ConfidenceBar, PageHeader } from "@/components/ui";
+import DetectedCourt from "@/components/court3d/DetectedCourt";
 import CourtTapper from "@/components/upload/CourtTapper";
 
 const STAGE_HINT: Record<string, string> = {
@@ -180,6 +181,7 @@ export default function UploadPage() {
           <ol className="mt-4 space-y-3">
             {(job.stages ?? []).map((st, i) => <StageRow key={st.id} st={st} index={i} />)}
           </ol>
+          {job.detected && <div className="mt-4"><DetectedCourt summary={job.detected} /></div>}
           {job.status === "done" && job.match_id && (
             <div className="mt-4 flex flex-wrap items-center gap-3">
               <Link href={`/matches/${job.match_id}`} className="btn-primary">Open your match →</Link>

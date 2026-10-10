@@ -104,6 +104,7 @@ class Analyzer:
         self.sport = scene.sport
         cal_file, roi_file = stages.scene_files(scene)
         _dump(out / "stage_calibration.json", cal_file)
+        _dump(out / "stage_court.json", stages.court_summary(scene))      # shown as soon as the court is detected
         _dump(out / "stage_roi.json", roi_file)
         cfg, H = scene.cfg, scene.H
 

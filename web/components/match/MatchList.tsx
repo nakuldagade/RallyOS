@@ -19,7 +19,7 @@ export default function MatchList({ matches }: { matches: MatchSummary[] }) {
           <div className="font-mono text-sm tabular-nums">{m.games.length ? m.games.map((g) => g.join("–")).join("  ") : <span className="text-muted">no score</span>}</div>
           {m.ball_tracker === "racketvision" && <Badge tone="blue" title="Shuttle track from the pretrained RacketVision plug-in">RacketVision ball</Badge>}
           {m.evidence_level === "video_verified" ? <Badge tone="green">video verified</Badge> : <Badge tone="amber">{m.evidence_level}</Badge>}
-          <Link href={`/matches/${m.match_id}?view=3d`} className="btn-ghost py-1 text-xs" title="Open this match with the 3D Smart Court: shot paths, moving players, heatmaps">3D court</Link>
+          <Link href={`/matches/${m.match_id}#smart-court`} className="btn-ghost py-1 text-xs" title="Open this match with the 3D Smart Court: shot paths, moving players, heatmaps">3D court</Link>
         </div>
       ))}
     </div>
