@@ -1,5 +1,4 @@
 # RallyOS — CPU environment (dev laptop). Python 3.11.
-# GPU machine: install requirements-gpu.txt FIRST, then this file (torch is then already satisfied).
 --extra-index-url https://download.pytorch.org/whl/cpu
 torch>=2.3
 torchvision>=0.18

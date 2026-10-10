@@ -1,7 +1,7 @@
 """In-process job queue. Runs rallyos.pipeline.Analyzer on the upload, which writes each stage into
 demo/out/<match_id>/, then imports the folder so the new match opens in the web app.
-If the pipeline raises NotImplementedError (a stage not built) it falls back to SIMULATED progress and the
-mock match, flagged `simulated`. Forwarding to RALLYOS_WORKER_URL (Mode 2) is a clearly marked TODO."""
+Everything runs locally on this machine. If the pipeline raises NotImplementedError (a stage not built) it
+falls back to SIMULATED progress and the mock match, flagged `simulated`."""
 import threading
 import time
 import uuid
@@ -43,7 +43,6 @@ def _run(job_id: str, video_path: Path, sport: str, taps: Optional[list], names:
     job = JOBS[job_id]
     job["status"] = "running"
     try:
-        # TODO (Mode 2): if settings.worker_url: POST the video to the GPU worker and mirror its progress here.
         from rallyos.pipeline import Analyzer
 
         match_id = "m_" + job_id[2:]

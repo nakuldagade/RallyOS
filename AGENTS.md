@@ -15,57 +15,42 @@ This file is the single source of truth for the project. The product and build p
 8. **Keep the demo safe.** Write outputs from each pipeline stage to disk so a crash keeps partial results. Precompute demo outputs into `demo/`.
 9. **Environment:** Windows 11. Python 3.11, Node 18+. Use paths that work on Windows. Download model weights ahead of time; don't depend on venue Wi-Fi.
 10. **Testing:** unit-test the scoring rules for every sport and the court-template fitting (on computer-generated courts with a known H). Follow §20 to verify the full system.
-11. **Two machines (see below).** Every piece of code must run on CPU *and* on CUDA. Never hard-code `cuda`; pick the device with `rallyos.device.get_device()`.
+11. **One machine, CPU first.** Everything runs locally on this laptop. Code must still run on CUDA too if a GPU is ever available: never hard-code `cuda`; pick the device with `rallyos.device.get_device()`.
 
-## Development setup: two machines
+## Development setup: one laptop
 
-The GPU machine **runs** the pretrained models faster. Nothing is trained on it (training would break the "no training" rule in the problem statement).
+All coding, processing, testing and the demo happen on this laptop, on CPU. There is no separate GPU machine and no remote worker.
 
-| | **Dev laptop (this machine)** | **GPU machine** |
-|---|---|---|
-| Role | Write all code: `core/`, `api/`, `web/`, tests, seed data | Run the heavy video processing on full-length clips |
-| Runs | Frontend, backend, unit tests, pipeline on **short test clips** (10–20 s, `--max-width 640`) on CPU | `python -m rallyos.pipeline <clip> --device cuda --out demo/out/<clip>/` |
-| Python deps | `requirements.txt` (CPU torch) | `requirements.txt` + `requirements-gpu.txt` (CUDA build of torch) |
+| | **Laptop** |
+|---|---|
+| Writes | All code: `core/`, `api/`, `web/`, tests, seed data |
+| Runs | Frontend (`npm run dev`), backend (`uvicorn`), unit tests, and the pipeline on uploaded clips |
+| Python deps | `requirements.txt` (CPU build of torch) |
+| Pipeline speed | Roughly 1.5–2.5 × the clip length on CPU (pose at 1280 px, every 3rd frame). Keep demo clips short (10–60 s) and precompute them |
 
-**How code and results move between them**
-- **Code:** a private Git repo (GitHub). Develop on the laptop and `git push`; on the GPU machine, `git pull` and run.
-- **Videos and outputs:** never commit them to git (`.gitignore`: `demo/**/*.mp4`, `demo/out/`, `*.pt`). Move them through a shared cloud folder (Google Drive / OneDrive), or with `scp` if both machines are on the same network.
-- **Same code path on both machines:** the pipeline writes `match.json`, `tracks.parquet`, `overlay.mp4` and the dispute clips into `demo/out/<clip>/`. On the laptop, the backend imports any finished output folder with `python -m api.import_match demo/out/<clip>/`, so the web app works the same whichever machine did the processing.
+**How processing works**
+- **Live:** the web upload page sends the video to the backend, which runs `rallyos.pipeline.Analyzer` in-process and streams progress.
+- **Batch:** `python -m rallyos.pipeline <clip> --taps "[[x,y]*4]" --out demo/out/<clip>/`, then `python -m api.import_match demo/out/<clip>/`.
+- **Videos and outputs:** never commit them to git (`.gitignore`: `demo/**/*.mp4`, `demo/out/`, `media/`, `models/`, `*.pt`). Share them through a cloud folder (Google Drive / OneDrive) when needed.
+- **Speed levers:** `RALLYOS_MAX_WIDTH` (pose input size; 640 is about 3× faster but misses far-court players) and `--stride` (pose every N frames).
 
-**Mode 1: batch processing (default, most reliable).** Process clips on the GPU machine, copy the output folders back, and import them. Use this for all demo content.
+**Config / env vars:** `RALLYOS_DEVICE=auto|cpu|cuda`, `RALLYOS_MAX_WIDTH`, `RALLYOS_BALL_TRACKER`, `ANTHROPIC_API_KEY` (optional; coach falls back to templates). Keep them in `.env` (git-ignored) and commit a `.env.example`.
 
-**Mode 2: remote worker (stretch goal, for a live "upload a video" demo).**
-- On the GPU machine, run `uvicorn api.worker:app --port 8001` and expose it with `cloudflared tunnel --url http://localhost:8001`.
-- On the laptop, set `RALLYOS_WORKER_URL=<tunnel url>`. The backend then sends uploaded videos to the GPU worker and streams progress back.
-- If `RALLYOS_WORKER_URL` isn't set, the backend processes on local CPU.
-
-**Config / env vars:** `RALLYOS_DEVICE=auto|cpu|cuda`, `RALLYOS_WORKER_URL`, `RALLYOS_MAX_WIDTH`, `ANTHROPIC_API_KEY` (optional; coach falls back to templates). Keep them in `.env` (git-ignored) and commit a `.env.example`.
-
-**Agent roles (two Claude Code sessions)**
-- **Builder agent (laptop):** owns all code. Writes `core/`, `api/`, `web/` and tests, and pushes to `main`.
-- **Runner agent (GPU machine, Shakti Cloud terminal):**
-  - **Does:** `git pull`, set up the CUDA environment, download pretrained weights, run the pipeline on clips, report speed and accuracy numbers, and debug CUDA- or performance-specific problems.
-  - **Doesn't:** train or fine-tune anything, or change pipeline logic directly. A GPU-only fix goes on a `gpu-fix/*` branch, or is described to the builder agent.
-- **No `.pkl` / model files are produced by us.** The only model files are downloaded pretrained weights (`yolo11n.pt`, `yolo11n-pose.pt`). Ultralytics downloads them automatically on first use.
+**Agent role (one Claude Code session)**
+- **Builder agent (laptop):** owns all code, runs the pipeline and the app, writes `core/`, `api/`, `web/` and tests, and pushes to `main`.
+- **No `.pkl` / model files are produced by us.** The only model files are downloaded pretrained weights (`yolo11n-pose.pt`, kept in `models/`). Ultralytics downloads them automatically on first use.
+- **Windows note:** Smart App Control / Application Control can block freshly installed PyTorch DLLs. Don't try to bypass it; it usually clears after Windows checks the files. The pose stage also has an ONNX + OpenCV fallback (`models/yolo11n-pose.onnx`), and if neither loads the pipeline skips players and says so.
 
 **Optional pretrained ball tracker: RacketVision (use as-is, never retrain)**
 - **Source:** code at github.com/OrcustD/RacketVision (MIT), weights at huggingface.co/linfeng302/RacketVision-Models, dataset at huggingface.co/datasets/linfeng302/RacketVision. Paper: arXiv 2511.17045.
-- **What we use:** the TrackNetV3 ball-tracking checkpoint `balltrack_best.pth`. It covers badminton, table tennis and tennis.
-  - Download it with their `python download_checkpoints.py --module <BallTrack module name>`; check the exact name in their README.
-  - Inference only. **Never** train or fine-tune it, and never train it on our own clips.
-- **What we skip:** the racket-pose models (RTMDet + RTMPose). They need mmcv/mmdet, which is fragile on newer CUDA, and we already get wrist positions from YOLO-pose. The `.pkl` files in the dataset are trajectory samples, not models.
-- **Separate environment:** install it in its own venv on the GPU machine (`.venv-racketvision`, Python 3.10, torch 2.1.2), because it conflicts with our Python 3.11 / ultralytics environment.
-- **Wrapper:** `core/rallyos/track/plugins/racketvision.py`
-  - **Input:** an arbitrary video.
-  - **Steps:** extract the frames, build a median background image, call their inference, and convert the heatmap output to our ball-candidate format (pixel x, y, confidence).
-  - **What happens next:** the result feeds the same physics path-finding (§4.3), as an extra candidate source.
-- **When to use it:**
-  - **Badminton, TT, tennis:** use the plug-in.
-  - **Pickleball, padel, squash:** use the geometric tracker only.
-  - **Setting:** `RALLYOS_BALL_TRACKER=auto|geometric|racketvision`.
+- **What we use:** the TrackNetV3 ball-tracking checkpoint `balltrack_best.pth`. It covers badminton, table tennis and tennis. Inference only. **Never** train or fine-tune it, and never train it on our own clips.
+- **What we have:** precomputed predictions for the 46 badminton test clips (`demo/racketvision/`, git-ignored), imported with `python -m rallyos.track.plugins.racketvision build ...`. They are used as an alternative shuttle source and as the reference for measuring our geometric tracker.
+- **Running it on new videos is optional and local:** it needs its own venv (`.venv-racketvision`, Python 3.10, torch 2.1.2) because it conflicts with our Python 3.11 / ultralytics environment, and on CPU it is slow. Set `RALLYOS_RACKETVISION_ROOT` and `RALLYOS_RACKETVISION_PY`, then `python -m rallyos.track.plugins.racketvision run <video> --out demo/out/<clip>/`.
+- **What we skip:** the racket-pose models (RTMDet + RTMPose); we already get wrist positions from YOLO-pose.
+- **When to use it:** badminton, TT, tennis can use the plug-in; pickleball, padel, squash use the geometric tracker only. Setting: `RALLYOS_BALL_TRACKER=auto|geometric|racketvision`.
 - **Pitch slide:** compare the plug-in against the geometric tracker on our own phone footage. The model was trained on broadcast video, so it needs proving on amateur phone angles. Report both results honestly.
 
-**Demo day:** present from the laptop using precomputed outputs (Mode 1). Use Mode 2 for a live upload only if the tunnel works on the venue network.
+**Demo day:** present from the laptop using precomputed outputs in `demo/out/` (imported into the app). Run a live upload only with a short clip, since processing is on CPU.
 
 ---
 
@@ -74,7 +59,7 @@ The GPU machine **runs** the pretrained models faster. Nothing is trained on it 
 
 > **Assumptions** (change any that are wrong):
 > - **One laptop, one Claude Code builder session.** The 4 team members share this laptop and rotate the human roles in §12. Only this one session writes code, so the build plan runs in order rather than in parallel.
-> - The laptop has no usable GPU. Full-length clips are processed on the Shakti Cloud GPU, which is opened from this same laptop in the browser (runner agent, see "Development setup: two machines").
+> - The laptop has no usable GPU and there is no cloud GPU: everything is processed locally on CPU, so demo clips are kept short and precomputed.
 > - You're allowed to bring pre-recorded video.
 > - **Badminton** is the main demo sport. It matches the reference image and is a very large grassroots sport in India.
 > - Repo: https://github.com/ELEVATE-1-0/ELEV02 (`main` branch).
@@ -429,9 +414,9 @@ flowchart LR
 | Mobile / offline | Installable web app (PWA): offline score keeper (IndexedDB), voice scoring through the browser speech API ("point blue"), upload later when online | Works courtside with poor network |
 | Language model | Claude API: `claude-haiku-5-5` for quick insights, `claude-sonnet-5-5` for the full report; offline fallback = template rules | Grounded write-ups; works offline |
 | Login | Supabase Auth or simple JWT (demo: preset users) | |
-| Hosting | Frontend on Vercel; vision processing on the Shakti Cloud GPU (batch, or Cloudflare Tunnel worker); Docker image for the product | Free cloud CPUs are too slow for video processing |
+| Hosting | Hackathon: everything local on the laptop. Product: frontend on Vercel, vision processing on rented GPUs, Docker image | Phone-side processing later removes most compute cost |
 
-**Speed target:** a 2-minute clip processed in 3 minutes or less on the Shakti Cloud GPU.
+**Speed target:** on the laptop CPU, a 30-second clip in about a minute (pose at 1280 px every 3rd frame); on a GPU, a 2-minute clip in 3 minutes or less.
 - Run YOLO on every frame at 960 px.
 - Run pose on every 2nd frame.
 - Search for the ball at full resolution, but only in the court area.
@@ -531,7 +516,7 @@ The frontend builds against a mock version of this file from the start, so nobod
 ```
 api/
   main.py                 # FastAPI app, CORS (allow http://localhost:3000), mounts routers, serves /media
-  config.py               # reads .env: DATABASE_URL, MEDIA_DIR, RALLYOS_WORKER_URL, ANTHROPIC_API_KEY
+  config.py               # reads .env: DATABASE_URL, MEDIA_DIR, RUNTIME_DIR, ANTHROPIC_API_KEY
   db.py                   # engine, session dependency, create_all()
   models.py               # SQLModel tables from §10 (users, players, venues, courts, matches, rallies,
                           #   events, disputes, insights, bookings, tournaments, registrations, meetups, rating_history)
@@ -548,7 +533,7 @@ api/
     tournaments.py        # GET /v1/tournaments, POST /register, POST /draw
     sports.py             # GET/POST /v1/sports (reads core/rallyos/sports/*.yaml)
   services/
-    jobs.py               # in-process job queue; runs rallyos.Analyzer locally or forwards to RALLYOS_WORKER_URL
+    jobs.py               # in-process job queue; runs rallyos.Analyzer locally and imports the result
     importer.py           # loads demo/out/<clip>/ (match.json, overlay.mp4, clips) into the DB
     rating.py             # Glicko-2 + evidence multiplier
     matchmaking.py        # style-vector similarity + rating window + distance
@@ -556,7 +541,6 @@ api/
     coach.py              # Claude API call + citation validator + offline template fallback
   import_match.py         # CLI: python -m api.import_match demo/out/<clip>/
   seed.py                 # CLI: python -m api.seed  (loads data/seed/*.json)
-  worker.py               # GPU-machine worker app (Mode 2): POST /process, GET /status/{id}
   tests/                  # pytest: rating, matchmaking, importer, routers (TestClient)
 media/                    # git-ignored: uploaded videos, overlays, dispute clips (served at /media)
 ```
@@ -679,12 +663,12 @@ Coordinates: `px` = image pixels of the source video; `court` = metres, origin a
 
 ## 12. 15-hour execution plan (one laptop, one builder session)
 
-Only **one** Claude Code session writes code on this laptop. Never run two coding sessions on this repo at the same time; they would overwrite each other's work. The runner agent on Shakti Cloud only runs code (see "Development setup: two machines").
+Only **one** Claude Code session writes code on this laptop. Never run two coding sessions on this repo at the same time; they would overwrite each other's work. All processing also runs on this laptop (see "Development setup: one laptop").
 
 **Human roles (the 4 teammates rotate; swap every ~3 hours):**
 - **Driver:** prompts the builder agent, one block at a time, and reviews each diff before it's committed.
 - **Tester:** runs the app and pipeline after every block, writes down bugs, and checks the outputs against the video.
-- **Data and GPU:** records or collects clips, operates the Shakti runner in the browser, copies `demo/out/` folders back, and hand-labels the small evaluation set (§14).
+- **Data:** records or collects clips, runs the pipeline on them locally, imports the `demo/out/` folders, and hand-labels the small evaluation set (§14).
 - **Pitch:** writes seed data content (players, venues, tournaments), the deck, the demo script and Q&A answers, and records the backup demo video.
 
 **Build order (sequential).** Each block ends with tests passing, a commit and a push.
@@ -697,13 +681,11 @@ Only **one** Claude Code session writes code on this laptop. Never run two codin
 | **5.5–8** | **B4 Shuttle + hits + rallies** | Geometric ball tracker (§4.3); audio onsets + speed-of-sound fix + hit fusion + hitter attribution (§4.4); rally segmentation; stats; `api.import_match`; upload page + job progress | **⛳ H8 milestone:** a real clip goes upload → court → players → shuttle → rallies → dashboard |
 | **8–10.5** | **B5 Intelligence** | Event-timing speed (§4.5); shot rules (§4.6); landing call + uncertainty ellipse + dispute clips + SHA-256 (§4.7); return-to-base, split-step, fatigue (§4.8); evidence-linked coach + offline fallback (§4.9); pages `disputes/[id]` and `matches/[id]/report` | Dispute replay and coach report work on the real clip |
 | **10.5–12** | **B6 Network** | Glicko-2 + evidence multiplier, style fingerprint, matchmaking, explainable prediction (§4.10) on seed data; pages `players/[id]`, `coach`, `play`, `courts`, `tournaments` | Rating updates after importing a match; matchmaking + prediction shown |
-| **12–13** | **B7 Multi-sport + SDK** | Court fingerprint on table tennis / pickleball / tennis frames; `sports` page with YAML viewer; SDK packaging (`pip install -e core/`, README, 5-line example); `developers` page; RacketVision plug-in wrapper if the runner has it working | Dropping a second sport's frame switches sport and rules |
-| **13–14** | **Freeze** | No new features. Final GPU processing of every clip, import all outputs, fix only blocking bugs, record the backup demo video | Full §13 demo works from precomputed outputs |
+| **12–13** | **B7 Multi-sport + SDK** | Court fingerprint on table tennis / pickleball / tennis frames; `sports` page with YAML viewer; SDK packaging (`pip install -e core/`, README, 5-line example); `developers` page; RacketVision plug-in wrapper (precomputed results imported) | Dropping a second sport's frame switches sport and rules |
+| **13–14** | **Freeze** | No new features. Final local processing of every demo clip, import all outputs, fix only blocking bugs, record the backup demo video | Full §13 demo works from precomputed outputs |
 | **14–15** | **Pitch** | Deck (10 slides), 3 timed rehearsals, Q&A prep (limitations, accuracy numbers from §14) | |
 
-**Runner agent (Shakti GPU) timeline, operated by the Data and GPU person in parallel:**
-- **During B1–B2:** set up the CUDA environment, download YOLO weights, and set up the RacketVision ball tracker in its own venv.
-- **From B3 onward:** after each push, `git pull` and process all clips, then copy `demo/out/` back to the laptop.
+**Local processing, operated by the Data person in parallel:** after each block that changes the pipeline, re-run the demo clips locally and import the outputs.
 
 **Cut list, in this order, if you're behind:**
 1. Flight-plane 3D (keep event-timing speed).
@@ -711,7 +693,7 @@ Only **one** Claude Code session writes code on this laptop. Never run two codin
 3. Automatic court detection (keep 4-tap).
 4. Pages `capture` and `score`, plus voice scoring.
 5. Booking UI and meetups.
-6. Webhooks and Mode 2 remote worker.
+6. Webhooks.
 7. `courts` and `tournaments` pages (mention them on a slide instead).
 
 **Never cut:**
@@ -757,7 +739,7 @@ Hand-label a small test set: about 300 frames and 20 rallies. **These labels are
 | Automatic point winner (before human confirmation) | At least 80% |
 | Speed error vs timed ground truth (known distance and time) | Within ±15% |
 | Time to first insight at a new venue | Under 60 seconds |
-| Processing speed | At most 1.5× the clip length on GPU |
+| Processing speed | At most 2.5× the clip length on the laptop CPU |
 
 **Product metrics for the pitch:**
 - matches recorded per venue per week,

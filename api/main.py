@@ -28,5 +28,4 @@ app.mount("/media", StaticFiles(directory=str(settings.media_dir)), name="media"
 
 @app.get("/health")
 def health():
-    return {"ok": True, "mock_fallback": settings.mock_fallback, "coach": "claude" if settings.anthropic_key else "template",
-            "worker": bool(settings.worker_url)}
+    return {"ok": True, "mock_fallback": settings.mock_fallback, "coach": "claude" if settings.anthropic_key else "template"}

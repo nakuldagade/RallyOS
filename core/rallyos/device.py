@@ -22,7 +22,7 @@ def get_device(preferred: str | None = None) -> str:
     Priority: the `preferred` argument (e.g. a --device CLI flag), then the
     RALLYOS_DEVICE env var, then "auto". "auto" picks CUDA when torch can see a
     GPU. Asking for "cuda" on a machine without one warns and falls back to CPU,
-    so the same code runs on the dev laptop and the GPU machine.
+    so the same code runs on CPU by default and on a GPU if one is available.
     """
     choice = (preferred or os.environ.get("RALLYOS_DEVICE") or "auto").strip().lower()
     if choice not in _VALID:

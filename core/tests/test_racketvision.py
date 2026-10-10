@@ -93,8 +93,8 @@ def test_entry_like_matches_existing_format():
         rv._entry_like(42, "m", "r")
 
 
-@pytest.mark.skipif(not REAL_CSV.is_file(), reason="runner CSV not downloaded")
-def test_real_runner_csv():
+@pytest.mark.skipif(not REAL_CSV.is_file(), reason="RacketVision predictions CSV not present")
+def test_real_predictions_csv():
     preds = rv.read_predictions(REAL_CSV)
     assert len(preds) == 46
     balls = preds["match117_000"]

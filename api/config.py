@@ -31,7 +31,6 @@ class Settings:
     mock_dir = ROOT / "data" / "mock"
     seed_dir = ROOT / "data" / "seed"
     out_dir = ROOT / "demo" / "out"
-    worker_url = os.getenv("RALLYOS_WORKER_URL", "")
     anthropic_key = os.getenv("ANTHROPIC_API_KEY", "")
     coach_model = os.getenv("RALLYOS_COACH_MODEL", "claude-sonnet-5-5")
     mock_fallback = os.getenv("MOCK_FALLBACK", "true").lower() == "true"

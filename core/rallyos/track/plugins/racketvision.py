@@ -3,20 +3,20 @@
 Inference only: the pretrained `balltrack_best.pth` is used exactly as released and is never trained or
 fine-tuned. It covers badminton, table tennis and tennis; other sports use the geometric tracker.
 
-The model runs on the GPU machine in its own venv (Python 3.10, torch 2.1.2), so this module never imports
-it. It reads the model's CSV output and, on the GPU machine, can drive its scripts through a subprocess.
+The model needs its own venv (Python 3.10, torch 2.1.2), so this module never imports it. It reads the
+model's CSV output and can drive its scripts through a subprocess (optional; slow on CPU).
 
 CSV formats accepted:
   * per-video results.csv from inference.py:  Frame,X,Y,Visibility,Confidence
     (Frame is one ahead of the real video frame, so video_frame = Frame - 1; the -1 row is dropped)
-  * the runner's combined CSV:  video_frame,Frame,X,Y,Visibility,Confidence,match,rally
+  * the combined test-set CSV:  video_frame,Frame,X,Y,Visibility,Confidence,match,rally
 
 CLI (python -m rallyos.track.plugins.racketvision ...):
   list  <csv>                                      clips in a combined CSV with detection rates
   build <csv> --clip match117_000 [--video V]      write demo/out/rv_<clip>/ (match.json + tracks.json)
   build <csv> --all [--videos DIR]                 every clip in the CSV
   merge <out_dir> <csv> [--clip C]                 replace the ball track in an existing output folder
-  run   <video> --out DIR                          GPU machine only: run their inference on a new video
+  run   <video> --out DIR                          optional: run their inference on a new video (own venv)
 """
 
 from __future__ import annotations
@@ -88,14 +88,14 @@ def clip_summary(preds: dict[str, list[dict | None]]) -> list[dict]:
 
 
 def _reference_metrics(csv_path: Path) -> dict:
-    """Metrics from the runner's summary.json next to the CSV, if present (their test set, not our footage)."""
+    """Metrics from summary.json next to the CSV, if present (their test set, not our footage)."""
     summary = csv_path.parent / "summary.json"
     if not summary.is_file():
         return {}
     data = json.loads(summary.read_text(encoding="utf-8"))
     return {"reference_metrics": data.get("metrics", {}),
             "reference_note": f"Measured on the RacketVision badminton test set ({data.get('n_clips', '?')} broadcast clips) "
-                              "on the GPU runner. Not yet measured on our own phone footage."}
+                              "with their test script. Not yet measured on our own phone footage."}
 
 
 def build_clip(csv_path: str | Path, clip: str, out_dir: str | Path, *, video: str | Path | None = None,
@@ -138,7 +138,7 @@ def merge_into(out_dir: str | Path, csv_path: str | Path, clip: str | None = Non
     return out
 
 
-# -- GPU machine: drive their scripts ------------------------------------------------------------------
+# -- optional: drive their scripts locally ------------------------------------------------------------------
 
 def _entry_like(example: object, match: str, rally: str) -> object:
     """Build a test.json entry for our clip in the same shape as an existing entry."""
@@ -216,7 +216,7 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("csv")
     p.add_argument("--clip")
 
-    p = sub.add_parser("run", help="GPU machine: run RacketVision inference on a video")
+    p = sub.add_parser("run", help="run RacketVision inference on a video (needs its own venv)")
     p.add_argument("video")
     p.add_argument("--sport", default="badminton", choices=SUPPORTED_SPORTS)
     p.add_argument("--out", help="also build an output folder from the result")

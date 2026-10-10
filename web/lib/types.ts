@@ -340,5 +340,4 @@ export interface Health {
   ok: boolean;
   mock_fallback: boolean;
   coach: string;
-  worker: boolean;
 }

@@ -1,5 +1,5 @@
 """Loads a finished pipeline output folder (match.json, tracks.json, overlay.mp4, clips) into the DB.
-Used by `python -m api.import_match demo/out/<clip>/` and by the job runner. Idempotent."""
+Used by `python -m api.import_match demo/out/<clip>/` and by the upload jobs. Idempotent."""
 import json
 import shutil
 from pathlib import Path
