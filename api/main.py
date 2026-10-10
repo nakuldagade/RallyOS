@@ -11,8 +11,8 @@ from api.config import settings
 from api import db as db_module
 from api.db import backend, create_all
 from api.services import live as live_service
-from api.routers import (calibrate, coach, courts, disputes, live, matches, network, players, sports,
-                         tournaments, videos)
+from api.routers import (auth, calibrate, coach, courts, disputes, live, matches, network, players, sports,
+                         team, tournaments, videos)
 
 
 @asynccontextmanager
@@ -26,7 +26,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="RallyOS API", version="1.0", lifespan=lifespan)
 app.add_middleware(CORSMiddleware, allow_origins=settings.cors_origins, allow_methods=["*"], allow_headers=["*"])
 
-for r in (calibrate, videos, live, matches, disputes, players, coach, network, courts, tournaments, sports):
+for r in (auth, team, calibrate, videos, live, matches, disputes, players, coach, network, courts, tournaments, sports):
     app.include_router(r.router, prefix="/v1")
 
 app.mount("/media", StaticFiles(directory=str(settings.media_dir)), name="media")

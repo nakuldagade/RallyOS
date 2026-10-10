@@ -1,8 +1,9 @@
 // Fetch wrapper for the RallyOS API. Base URL from NEXT_PUBLIC_API_URL.
 // NEXT_PUBLIC_USE_MOCK=true reads /mock/*.json; otherwise match + tracks fall back to the mock
 // when the backend is unreachable, so the demo never shows a blank page.
+import { getToken } from "./auth";
 import type {
-  Booking, CourtDetection, CoachReport, CourtRow, DisputeDetail, DrawMatch, Health, MatchJSON, MatchSummary, Player,
+  AuthUser, Booking, CoachDashboard, PlayerAnalysis, CourtDetection, CoachReport, CourtRow, DisputeDetail, DrawMatch, Health, MatchJSON, MatchSummary, Player,
   Prediction, RatingPoint, Score, SportConfig, Suggestion, Tournament, Tracks,
 } from "./types";
 
@@ -23,7 +24,9 @@ export function mediaUrl(path?: string | null): string | null {
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let res: Response;
   try {
-    res = await fetch(API + path, { cache: "no-store", ...init });
+    const token = getToken();
+    const headers = token ? { ...(init?.headers as Record<string, string> | undefined), Authorization: `Bearer ${token}` } : init?.headers;
+    res = await fetch(API + path, { cache: "no-store", ...init, headers });
   } catch {
     throw new ApiError(0, `Backend not reachable at ${API}. Start it with: uvicorn api.main:app --port 8000`);
   }
@@ -69,6 +72,17 @@ const post = (body?: unknown): RequestInit =>
 const q = encodeURIComponent;
 
 export const api = {
+  login: (email: string, password: string, role: "player" | "coach") =>
+    request<{ token: string; user: AuthUser }>("/v1/auth/login", post({ email, password, role })),
+  registerAccount: (body: { name: string; email: string; password: string; role: "player" | "coach" }) =>
+    request<{ token: string; user: AuthUser }>("/v1/auth/register", post(body)),
+  me: () => request<AuthUser>("/v1/auth/me"),
+  playerAnalysis: (id: string) => request<PlayerAnalysis>(`/v1/players/${encodeURIComponent(id)}/analysis`),
+  coachDashboard: () => request<CoachDashboard>("/v1/coach/dashboard"),
+  addToRoster: (playerId: string) => request<unknown>("/v1/coach/roster", post({ player_id: playerId })),
+  removeFromRoster: (playerId: string) => request<unknown>(`/v1/coach/roster/${encodeURIComponent(playerId)}`, { method: "DELETE" }),
+  assignPlayers: (matchId: string, side1: string | null, side2: string | null) =>
+    request<unknown>(`/v1/matches/${encodeURIComponent(matchId)}/players`, post({ side1, side2 })),
   health: () => request<Health>("/health"),
   matches: () => request<MatchSummary[]>("/v1/matches"),
   match: (id: string) => withMock(() => request<MatchJSON>(`/v1/matches/${q(id)}`), "/mock/match.json"),

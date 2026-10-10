@@ -22,6 +22,7 @@ import ShotMix from "@/components/match/ShotMix";
 import InsightCard from "@/components/coach/InsightCard";
 import AudioCard from "@/components/match/AudioCard";
 import BallTrackingCard from "@/components/match/BallTrackingCard";
+import AssignPlayers from "@/components/match/AssignPlayers";
 
 type Tab = "stats" | "shots" | "events" | "insights";
 
@@ -108,6 +109,8 @@ function MatchVision() {
         </div>
         <Link href={`/matches/${m.match_id}/report`} className="btn-primary">AI coach report →</Link>
       </div>
+
+      {!match.data?.mock && <AssignPlayers matchId={m.match_id} players={m.players} onSaved={match.reload} />}
 
       {/* Row 1: the replay and the result of the match */}
       <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">

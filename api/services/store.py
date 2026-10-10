@@ -18,14 +18,28 @@ def mock_match() -> dict:
     return _read(settings.mock_dir / "match.json")
 
 
+def _assigned(data: dict, row: Optional[Match], session: Optional[Session]) -> dict:
+    """The players chosen for side 1 and side 2 (Match.p1 / p2) replace the generic names in the players list."""
+    if row is None or session is None:
+        return data
+    from api.models import Player
+
+    for tid, pid in ((1, row.p1), (2, row.p2)):
+        pl = session.get(Player, pid) if pid else None
+        meta = next((p for p in data.get("players", []) if p["track_id"] == tid), None)
+        if pl and meta is not None:
+            meta["player_id"], meta["name"] = pl.id, pl.name
+    return data
+
+
 def load_match(match_id: str, session: Optional[Session] = None) -> dict:
+    row = session.get(Match, match_id) if session is not None else None
     override = settings.runtime_dir / f"{match_id}.json"
     if override.exists():
-        return _read(override)
+        return _assigned(_read(override), row, session)
     if session is not None:
-        row = session.get(Match, match_id)
         if row and row.json_path and Path(row.json_path).exists():
-            return _read(Path(row.json_path))
+            return _assigned(_read(Path(row.json_path)), row, session)
     if settings.mock_fallback:
         data = mock_match()
         if data["match_id"] == match_id:

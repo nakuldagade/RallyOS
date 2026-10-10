@@ -176,3 +176,10 @@ class RatingHistory(SQLModel, table=True):
     rd: float = 0.0
     evidence_level: str = "assisted"
     at: str = Field(default_factory=now_iso)
+
+
+class Credential(SQLModel, table=True):
+    """A login: kept apart from User so the user table needs no new column on a database that already has it."""
+    user_id: int = Field(primary_key=True, foreign_key="user.id")
+    password_hash: str = ""
+    created_at: str = Field(default_factory=now_iso)

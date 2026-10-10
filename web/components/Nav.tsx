@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { homeFor, useAuth } from "@/lib/auth";
 
 const SECTIONS: { title: string; links: { href: string; label: string }[] }[] = [
   { title: "Analyse", links: [
@@ -15,7 +16,6 @@ const SECTIONS: { title: string; links: { href: string; label: string }[] }[] = 
   ] },
   { title: "Improve", links: [
     { href: "/players", label: "Players" },
-    { href: "/coach", label: "Coach dashboard" },
   ] },
   { title: "Play", links: [
     { href: "/play", label: "Find a match" },
@@ -74,9 +74,38 @@ function BackendStatus() {
   );
 }
 
+function Account() {
+  const { user, ready, signOut } = useAuth();
+  if (!ready) return <div className="h-14 rounded-lg bg-fg/5" />;
+  if (!user) {
+    return (
+      <div className="rounded-lg border border-border p-3 text-sm">
+        <div className="mb-2 text-xs text-muted">Players and coaches each get their own dashboard.</div>
+        <Link href="/login" className="btn-primary w-full text-center">Log in</Link>
+      </div>
+    );
+  }
+  return (
+    <div className="rounded-lg border border-border p-3 text-sm">
+      <div className="flex items-center justify-between gap-2">
+        <span className="truncate font-medium">{user.name}</span>
+        <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${user.role === "coach" ? "bg-sky-500/15 text-sky-500" : "bg-emerald-500/15 text-emerald-500"}`}>{user.role}</span>
+      </div>
+      <div className="mt-2 flex gap-2">
+        <Link href={homeFor(user)} className="btn-ghost flex-1 py-1 text-center text-xs">{user.role === "coach" ? "Coach dashboard" : "My dashboard"}</Link>
+        <button onClick={signOut} className="btn-ghost py-1 text-xs">Log out</button>
+      </div>
+    </div>
+  );
+}
+
 export default function Nav() {
   const path = usePathname();
+  const { user } = useAuth();
   const active = (href: string) => (href === "/" ? path === "/" : path.startsWith(href));
+  const sections = SECTIONS.map((s) => s.title !== "Improve" ? s : {
+    ...s, links: [...(user ? [{ href: homeFor(user), label: user.role === "coach" ? "Coach dashboard" : "My dashboard" }] : []), ...s.links],
+  });
   return (
     <aside className="border-b border-border bg-card md:sticky md:top-0 md:h-screen md:w-60 md:shrink-0 md:border-b-0 md:border-r">
       <div className="flex h-full flex-col gap-4 p-4">
@@ -87,8 +116,9 @@ export default function Nav() {
             <span className="block text-[11px] leading-tight text-muted">Every rally counted</span>
           </span>
         </Link>
+        <Account />
         <nav className="flex gap-1 overflow-x-auto md:flex-1 md:flex-col md:gap-4 md:overflow-visible">
-          {SECTIONS.map((s) => (
+          {sections.map((s) => (
             <div key={s.title} className="flex gap-1 md:flex-col">
               <div className="label hidden px-2 md:block">{s.title}</div>
               {s.links.map((l) => (

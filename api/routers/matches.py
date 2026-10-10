@@ -8,9 +8,10 @@ from sqlmodel import Session, select
 
 from api.config import settings
 from api.db import get_session
-from api.models import Match
+from api.models import Match, Player, User
 from api.schemas import MatchJSON, MatchSummary, Recalibrate, ScoreConfirm
 from api.services import jobs, matches_admin, rating, store
+from api.services.access import current_user
 
 router = APIRouter(tags=["matches"])
 
@@ -133,3 +134,26 @@ def delete_many(body: DeleteMatches, session: Session = Depends(get_session)):
     if not body.ids:
         raise HTTPException(400, "no match ids given")
     return matches_admin.delete_matches(session, body.ids)
+
+
+class AssignPlayers(BaseModel):
+    side1: str | None = None          # the player who is track 1 (the near side when the camera is behind a baseline)
+    side2: str | None = None          # the player who is track 2
+
+
+@router.post("/matches/{match_id}/players")
+def assign_players(match_id: str, body: AssignPlayers, user: User = Depends(current_user), session: Session = Depends(get_session)):
+    """Say who played: the analysis only knows a near and a far player. Once assigned, the match joins those players' history
+    and analysis. Any logged-in user can do it (the demo has no match ownership yet)."""
+    row = session.get(Match, match_id)
+    if row is None:
+        raise HTTPException(404, f"match {match_id} not found")
+    for pid in (body.side1, body.side2):
+        if pid and not session.get(Player, pid):
+            raise HTTPException(404, f"player {pid} not found")
+    if body.side1 and body.side1 == body.side2:
+        raise HTTPException(400, "one player cannot be on both sides")
+    row.p1, row.p2 = body.side1, body.side2
+    session.add(row)
+    session.commit()
+    return {"match_id": match_id, "side1": row.p1, "side2": row.p2}

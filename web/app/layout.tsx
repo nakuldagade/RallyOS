@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Nav from "@/components/Nav";
+import Providers from "@/components/Providers";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -17,10 +18,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
       <body className="min-h-screen antialiased">
-        <div className="flex min-h-screen flex-col md:flex-row">
-          <Nav />
-          <main className="min-w-0 flex-1 px-4 py-6 md:px-8">{children}</main>
-        </div>
+        <Providers>
+          <div className="flex min-h-screen flex-col md:flex-row">
+            <Nav />
+            <main className="min-w-0 flex-1 px-4 py-6 md:px-8">{children}</main>
+          </div>
+        </Providers>
       </body>
     </html>
   );

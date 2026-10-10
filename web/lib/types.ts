@@ -457,3 +457,86 @@ export interface Health {
   mock_fallback: boolean;
   coach: string;
 }
+
+
+// ---- accounts, a player's history and analysis, the coach dashboard -------------------------------------------------
+export interface AuthUser {
+  id: number;
+  email: string;
+  name: string;
+  role: "player" | "coach";
+  player_id: string | null;
+}
+
+export interface MetricValues {
+  avg_return_to_base_s: number | null;
+  returned_pct: number | null;
+  split_step_pct: number | null;
+  fastest_shot_kmh: number | null;
+  top_speed_mps: number | null;
+  distance_per_min: number | null;
+  best_shot_score: number | null;
+}
+
+export interface AnalysisMatch {
+  match_id: string;
+  date: string;
+  sport: string;
+  duration_s: number;
+  side: string | null;
+  opponent: string;
+  opponent_id: string | null;
+  result: "won" | "lost" | null;
+  hits: number | null;
+  distance_m: number | null;
+  metrics: MetricValues;
+  shot_mix: Record<string, number>;
+  best_shot: BestShot | null;
+}
+
+export interface Comparison {
+  metric: keyof MetricValues;
+  label: string;
+  unit: string;
+  better: "lower" | "higher" | "neutral";
+  earlier: number;
+  latest: number;
+  delta: number;
+  change_pct: number;
+  verdict: "better" | "worse" | "steady" | "changed";
+  n_earlier: number;
+}
+
+export interface PlayerAnalysis {
+  player: { id: string; name: string; sport: string; rating: number; rd: number };
+  summary: { matches: number; analysed_minutes: number; hits: number; distance_m: number; wins: number; losses: number; frames_tracked: number };
+  matches: AnalysisMatch[];
+  trends: Record<string, { match_id: string; i: number; value: number | null }[]>;
+  compare: Comparison[];
+  insights: { metric: string; verdict: string; text: string }[];
+  heatmap: { cell: number; sport: string; court: { length: number; width: number }; frames: number; all: number[][] | null; earlier: number[][] | null; latest: number[][] | null };
+  zones: Record<string, number>;
+  shot_mix: Record<string, number>;
+  best_shots: (BestShot & { match_id: string; date: string })[];
+  data_note: string;
+}
+
+export interface CoachRow {
+  player_id: string;
+  name: string;
+  rating: number;
+  rd: number;
+  rating_change: number | null;
+  rating_is_sample: boolean;
+  matches: number;
+  analysed_minutes: number;
+  latest: { match_id: string; opponent: string; result: string | null; date: string; metrics: MetricValues } | null;
+  attention: { metric: string; text: string }[];
+  improving: { metric: string; text: string }[];
+}
+
+export interface CoachDashboard {
+  coach: { id: number; name: string };
+  players: CoachRow[];
+  totals: { players: number; matches: number; need_attention: number };
+}
