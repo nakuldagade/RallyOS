@@ -65,6 +65,25 @@ def test_a_tennis_ball_bounces_between_two_contacts_and_a_landing_is_one_arc():
 def test_unusable_pairs_make_no_flight():
     assert reconstruct([hit(1.0, 1, [3, 3]), hit(1.05, 2, [3, 9])], 25.0, BAD) == []            # too short to time
     assert reconstruct([hit(1.0, 1, [3, 3]), hit(5.0, 2, [3, 9])], 25.0, BAD) == []             # too long
-    assert reconstruct([hit(1.0, 1, None), hit(1.8, 2, [3, 9])], 25.0, BAD) == []               # no court position
-    assert reconstruct([hit(1.0, 1, [3, 3]), hit(1.8, 1, [3, 9])], 25.0, BAD) == []             # not clearly two different players
+    assert reconstruct([hit(1.0, 1, None), hit(1.8, 2, [3, 9])], 25.0, BAD) == []               # no court position and no tracks to find it in
+    assert reconstruct([hit(1.0, 1, [3, 3]), hit(1.8, 1, [3, 9])], 25.0, BAD) == []             # same player twice and no tracks to find the other one
     assert reconstruct([hit(1.0, 1, [3, 3])], 25.0, BAD) == []
+
+
+def frames_with(pos1, pos2, n=200):
+    return [{"players": [{"track_id": 1, "court": list(pos1)}, {"track_id": 2, "court": list(pos2)}]} for _ in range(n)]
+
+
+def test_a_hit_attributed_to_the_same_player_twice_still_crosses_to_the_other_player():
+    ev = [hit(1.0, 1, [3.0, 3.0]), hit(1.8, 1, [3.0, 3.0])]            # the opponent's hit was missed: both say player 1
+    f = reconstruct(ev, 25.0, BAD, frames_with((3.0, 3.0), (2.0, 11.0)))
+    assert len(f) == 1 and f[0]["track_id"] == 1 and f[0]["receiver_inferred"] is True
+    assert f[0]["samples"][-1][1:3] == [2.0, 11.0]                     # it ends where the OTHER player was standing, not on the hitter
+    assert reconstruct(ev, 25.0, BAD) == []                            # without tracked positions there is nothing to infer from
+
+
+def test_a_hit_without_a_court_position_uses_the_tracked_position_of_its_hitter():
+    ev = [{**hit(1.0, 1, None)}, hit(1.8, 2, [3.0, 11.0])]
+    f = reconstruct(ev, 25.0, BAD, frames_with((3.0, 3.0), (3.0, 11.0)))
+    assert len(f) == 1 and f[0]["samples"][0][1:3] == [3.0, 3.0] and f[0]["receiver_inferred"] is False
+    assert reconstruct([hit(1.0, None, None), hit(1.8, 2, [3.0, 11.0])], 25.0, BAD, frames_with((3, 3), (3, 11))) == []        # nobody to place it on

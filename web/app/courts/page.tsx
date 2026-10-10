@@ -161,7 +161,7 @@ function Viewer3D({ role, playerId }: { role: "coach" | "player"; playerId: stri
           {before.error && <p className="mt-2 text-xs text-rose-500">{before.error}</p>}
         </Card>
 
-        <Card title={role === "coach" ? "Players: choose who to show and compare" : "You"}>
+        <Card title={role === "coach" ? "Players: choose who to show and compare" : "You and your opponent"}>
           <ul className="space-y-2">
             {layers.map((l) => (
               <li key={l.id} className="rounded-lg border border-border p-2.5">
@@ -179,7 +179,7 @@ function Viewer3D({ role, playerId }: { role: "coach" | "player"; playerId: stri
             ))}
           </ul>
           <p className="mt-2 text-xs text-muted">
-            Each person has one colour, and their shuttle is drawn in it. {role === "player" ? "Only you are shown: other players' paths are never sent to your account." : "A previous match is drawn lighter."}
+            Each person has one colour, and their shuttle is drawn in it. {role === "player" ? "You and the opponent you faced are shown, in your own matches only: matches you were not in are never available to your account." : "A previous match is drawn lighter."}
           </p>
         </Card>
 

@@ -11,6 +11,12 @@ a landing). Between them:
                               a gravity-only arc between the two ends (a ball sport with a bounce in the middle for a contact
                               to contact flight) -> kind "estimate", drawn dashed and labelled as such
 
+Which flights are drawn. Every consecutive pair of events whose ends can be placed on the court: a hit followed by a called landing,
+or a hit followed by the next hit. Where the next hit was attributed to the SAME player (the opponent's hit was missed or mis-attributed:
+a shuttle crosses the net), the receiver is taken to be the other player and their tracked position at that moment is the far end
+(`receiver_inferred`). Where a hit event has no court position, the tracked position of its hitter at that frame is used. A flight whose
+ends are closer than a metre, shorter than 0.12 s or longer than 2.4 s is left out (a missed hit in between).
+
 Coordinates are court metres (origin at the near-left corner, x across, y along the length), z up. Nothing here is a tracked 3D
 position: it shows where a shot of that distance and duration could have gone.
 """
@@ -20,7 +26,7 @@ from __future__ import annotations
 import math
 
 from rallyos.analytics.flight import G, solve_launch, trajectory
-from rallyos.analytics.speed import LANDING_HEIGHT, MAX_FLIGHT_S, MIN_DIST_M, MIN_FLIGHT_S, _contact, _why_not
+from rallyos.analytics.speed import LANDING_HEIGHT, MAX_FLIGHT_S, MIN_DIST_M, MIN_FLIGHT_S, _contact
 
 BOUNCE_AT = 0.7           # a bouncing ball is taken to land 70% of the way along a contact-to-contact flight
 BOUNCE_TIME = 0.6         # ... after 60% of its flight time (it is faster before the bounce than after)
@@ -41,6 +47,36 @@ def _bounce_heights(h0: float, h1: float, T: float, n: int) -> list[float]:
     return first + second[1:]
 
 
+def _track_pos(frames: list[dict] | None, t: float, fps: float, track_id: int | None):
+    if not frames or track_id is None:
+        return None
+    fr = frames[min(max(0, round(t * fps)), len(frames) - 1)]
+    p = next((q for q in fr["players"] if q["track_id"] == track_id), None)
+    return list(p["court"]) if p and p.get("court") else None
+
+
+def _ends(a: dict, nxt: dict, frames, fps) -> tuple[list, list, dict, bool] | None:
+    """(start, end, the event standing for the far end, receiver_inferred) or None when a flight cannot be placed."""
+    if a["type"] != "hit" or a.get("track_id") is None or nxt is None:
+        return None
+    start = a.get("court") or _track_pos(frames, a["t"], fps, a["track_id"])
+    if not start:
+        return None
+    if nxt["type"] == "landing":
+        if not nxt.get("court") or nxt.get("note") or "call" not in nxt or nxt.get("confidence", 0) < 0.5:
+            return None
+        return list(start), list(nxt["court"]), nxt, False
+    if nxt["type"] != "hit":
+        return None
+    other = 2 if a["track_id"] == 1 else 1
+    inferred = nxt.get("track_id") is None or nxt.get("track_id") == a["track_id"]
+    recv = other if inferred else nxt["track_id"]
+    end = _track_pos(frames, nxt["t"], fps, recv) if inferred else (nxt.get("court") or _track_pos(frames, nxt["t"], fps, recv))
+    if not end:
+        return None
+    return list(start), list(end), {**nxt, "track_id": recv}, inferred
+
+
 def reconstruct(events: list[dict], fps: float, cfg: dict, frames: list[dict] | None = None) -> list[dict]:
     """One dict per flight: {rally_idx, track_id, t0, t1, kind, from, to, samples [[t, x, y, z]...], peak_z, speed_kmh, speed_err_pct, shot}."""
     proj = cfg["projectile"]
@@ -55,14 +91,16 @@ def reconstruct(events: list[dict], fps: float, cfg: dict, frames: list[dict] | 
         evs.sort(key=lambda e: e["t"])
         for i, a in enumerate(evs):
             nxt = evs[i + 1] if i + 1 < len(evs) else None
-            if a["type"] != "hit" or nxt is None or _why_not(a, nxt) is not None:
+            placed = _ends(a, nxt, frames, fps) if nxt is not None else None
+            if placed is None:
                 continue
+            start, end, far, inferred = placed
             T = nxt["t"] - a["t"]
-            d = math.dist(a["court"], nxt["court"])
+            d = math.dist(start, end)
             if d < MIN_DIST_M or T < MIN_FLIGHT_S or T > MAX_FLIGHT_S:
                 continue
             h0 = _contact(a, frames, fps)[0]
-            h1 = LANDING_HEIGHT[0] if nxt["type"] == "landing" else _contact(nxt, frames, fps)[0]
+            h1 = LANDING_HEIGHT[0] if nxt["type"] == "landing" else _contact(far, frames, fps)[0]
             n = max(2, int(round(T * SAMPLE_HZ)))
             kind, heights, fracs = "estimate", None, None
             sol = solve_launch(d, T, h1 - h0, vt) if vt else None
@@ -80,12 +118,12 @@ def reconstruct(events: list[dict], fps: float, cfg: dict, frames: list[dict] | 
             else:
                 heights = _arc(h0, h1, T, n)
                 fracs = [i / n for i in range(n + 1)]
-            ax, ay = a["court"]
-            bx, by = nxt["court"]
+            ax, ay = start
+            bx, by = end
             samples = [[round(a["t"] + T * i / (len(heights) - 1), 3), round(ax + (bx - ax) * f, 3), round(ay + (by - ay) * f, 3), round(max(0.0, z), 3)]
                        for i, (f, z) in enumerate(zip(fracs, heights))]
             flights.append({"rally_idx": a["rally_idx"], "track_id": a.get("track_id"), "t0": round(a["t"], 3), "t1": round(nxt["t"], 3),
-                            "kind": kind, "from": samples[0][1:], "to": samples[-1][1:], "samples": samples,
+                            "kind": kind, "receiver_inferred": inferred, "from": samples[0][1:], "to": samples[-1][1:], "samples": samples,
                             "peak_z": round(max(s[3] for s in samples), 2), "shot": a.get("shot"),
                             "speed_kmh": a.get("speed_kmh") if kind == "physics" else None, "speed_err_pct": a.get("speed_err_pct") if kind == "physics" else None})
     flights.sort(key=lambda f: f["t0"])

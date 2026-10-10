@@ -62,20 +62,23 @@ def matches(client, tmp_path_factory):
     return tmp
 
 
-def test_a_player_gets_only_their_own_side_the_other_players_data_is_never_sent(client, matches):
-    a = client.get("/v1/courts3d/matches/m_3d_a", headers=headers(client, "anika@rallyos.demo")).json()
-    assert [p["player_id"] for p in a["players"]] == ["p_anika"] and set(a["positions"]) == {"1"} and set(a["heat"]) == {"1"}
-    assert {f["track_id"] for f in a["flights"]} == {1}
-    assert "p_rohan" not in json.dumps(a) and "Far player" not in json.dumps(a)                 # nothing about the opponent leaves the server
-    b = client.get("/v1/courts3d/matches/m_3d_b", headers=headers(client, "anika@rallyos.demo")).json()
-    assert [p["track_id"] for p in b["players"]] == [2] and {f["track_id"] for f in b["flights"]} == {2}   # she was the far side there
-    assert "p_kabir" not in json.dumps(b)
+def test_a_player_sees_both_sides_of_their_own_matches_the_opponent_they_faced_included(client, matches):
+    h = headers(client, "anika@rallyos.demo")
+    a = client.get("/v1/courts3d/matches/m_3d_a", headers=h).json()
+    assert [p["player_id"] for p in a["players"]] == ["p_anika", "p_rohan"] and set(a["positions"]) == {"1", "2"} and set(a["heat"]) == {"1", "2"}
+    assert {f["track_id"] for f in a["flights"]} == {1, 2}                                        # her shots and her opponent's
+    assert a["players"][0]["color"] != a["players"][1]["color"]                                    # told apart by colour
+    b = client.get("/v1/courts3d/matches/m_3d_b", headers=h).json()
+    assert [p["player_id"] for p in b["players"]] == ["p_kabir", "p_anika"] and {f["track_id"] for f in b["flights"]} == {1, 2}
 
 
 def test_a_player_cannot_open_a_match_they_were_not_in(client, matches):
     h = headers(client, "anika@rallyos.demo")
     assert client.get("/v1/courts3d/matches/m_3d_c", headers=h).status_code == 403
     assert client.get("/v1/courts3d/matches/m_nope", headers=h).status_code == 404
+    other = client.get("/v1/courts3d/matches/m_3d_c", headers=headers(client, "meera@rallyos.demo")).json()      # Meera was in that one
+    assert [p["player_id"] for p in other["players"]] == ["p_meera", "p_isha"]
+    assert "p_meera" not in json.dumps(client.get("/v1/courts3d/matches/m_3d_a", headers=h).json())            # and none of her data is in Anika's matches
     assert client.get("/v1/courts3d/matches/m_3d_a").status_code == 401
 
 

@@ -2,7 +2,8 @@
 
 Who may see what is decided here, on the server:
   * a coach sees both sides of a match in which at least one assigned player is on their roster (to compare the players);
-  * a player sees ONLY their own side of a match they played: the other player's flights, positions and heatmap are never sent.
+  * a player sees both sides (themselves and the opponent they faced) of the matches THEY played, and nothing at all of any
+    other match: a match they were not in is refused, and is not even listed.
 Every number comes from an analysed match (events, tracks.json). The 3D heights of a flight are reconstructed (see
 core/rallyos/analytics/flights3d.py) and every flight says whether it is a physics solution or an estimate.
 """
@@ -36,8 +37,7 @@ def _allowed_tracks(user: User, row: Match, session: Session) -> dict[int, str |
     sides = {1: row.p1, 2: row.p2}
     if user.role == "player":
         me = player_of(user, session)
-        mine = {t: p for t, p in sides.items() if me and p == me.id}
-        return mine or None
+        return sides if me and me.id in (row.p1, row.p2) else None
     if user.role == "coach":
         ids = set(roster_ids(user, session))
         return sides if any(p in ids for p in sides.values() if p) else None
