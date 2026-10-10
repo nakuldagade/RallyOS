@@ -12,7 +12,7 @@ import { IdbStore } from "@/lib/outbox";
 import type { UploaderStatus } from "@/lib/outbox";
 import { pickMime } from "@/lib/segmenter";
 import { BADMINTON, sportLabel } from "@/lib/sports";
-import type { SportConfig } from "@/lib/types";
+import type { CourtDetection, SportConfig } from "@/lib/types";
 import { Badge, Card, ErrorBox, PageHeader } from "@/components/ui";
 import LiveDashboard from "@/components/live/LiveDashboard";
 
@@ -51,6 +51,7 @@ export default function CapturePage() {
   const [wake, setWake] = useState<"off" | "on" | "unsupported">("off");
   const [persistent, setPersistent] = useState(true);
   const [storageMode, setStorageMode] = useState<string | null>(null);
+  const [check, setCheck] = useState<{ busy: boolean; result?: CourtDetection; error?: string } | null>(null);
   const t0Ref = useRef(0);
 
   useEffect(() => { api.sports().then(setSports).catch(() => setSports([])); }, []);
@@ -125,6 +126,32 @@ export default function CapturePage() {
     return () => clearInterval(id);
   }, [phase, dispatch]);
 
+  // --- court check before recording: the same court detection as the upload page, on one frame of the camera -------------
+  const checkCourt = async () => {
+    const v = videoRef.current;
+    if (!v || !camera || !v.videoWidth) return;
+    setCheck({ busy: true });
+    try {
+      const c = document.createElement("canvas");
+      c.width = v.videoWidth;
+      c.height = v.videoHeight;
+      c.getContext("2d")?.drawImage(v, 0, 0);
+      const blob = await new Promise<Blob | null>((res) => c.toBlob(res, "image/jpeg", 0.9));
+      if (!blob) throw new Error("could not grab a frame from the camera");
+      const d = await api.detectCourt(blob, sport);
+      setCheck({ busy: false, result: d });
+      if (d.found && d.corners_px && d.width) {
+        const k = camera.w / d.width;                           // the answer is in the pixels of the frame that was analysed
+        setCorners(d.corners_px.map(([x, y]) => [Math.round(x * k), Math.round(y * k)] as Pt));
+        setMarking(false);
+      } else {
+        setCorners([]);
+      }
+    } catch (e) {
+      setCheck({ busy: false, error: e instanceof Error ? e.message : String(e) });
+    }
+  };
+
   // --- start / stop -----------------------------------------------------------------------------------------------
   const start = async () => {
     const stream = streamRef.current;
@@ -150,6 +177,7 @@ export default function CapturePage() {
       });
       capRef.current = cap;
       const info = await cap.start(sport, corners.length === 4 ? corners : null);
+      setCornersSent(corners.length === 4);                    // corners given at the start are already used by the analysis
       setStorageMode(info.storage);
       connect(info.session_id);
       t0Ref.current = performance.now();
@@ -208,6 +236,8 @@ export default function CapturePage() {
   const recording = phase === "recording";
   const lowFps = camera?.fps != null && camera.fps < 50;
   const needsCorners = recording && cal?.quality === "check";
+  // the court the analysis found (from the first chunk), drawn on the camera picture unless the user marked their own corners
+  const detectedCourt = recording && corners.length === 0 && cal?.corners_px && cal.corners_px.length === 4 ? (cal.corners_px as [number, number][]) : null;
 
   return (
     <div className="mx-auto max-w-6xl">
@@ -230,6 +260,15 @@ export default function CapturePage() {
                     <polygon points={`${camera.w * 0.12},${camera.h * 0.9} ${camera.w * 0.88},${camera.h * 0.9} ${camera.w * 0.7},${camera.h * 0.3} ${camera.w * 0.3},${camera.h * 0.3}`} />
                   </g>
                 )}
+                {detectedCourt && (
+                  <g>
+                    <polygon points={detectedCourt.map((c) => c.join(",")).join(" ")} fill="rgba(34,197,94,0.10)"
+                             stroke={cal?.quality === "check" ? "#f59e0b" : "#22c55e"} strokeWidth={camera.w / 300} strokeDasharray={cal?.quality === "check" ? `${camera.w / 80} ${camera.w / 120}` : undefined} />
+                    <text x={detectedCourt[3][0]} y={Math.max(camera.h / 30, detectedCourt[3][1] - camera.w / 90)} fontSize={camera.w / 50} fill="white" stroke="black" strokeWidth={camera.w / 1000}>
+                      {cal?.sport ? sportLabel(cal.sport) : "court"}{cal?.precision != null ? ` · fit ${Math.round(cal.precision * 100)}%` : ""}{cal?.quality === "check" ? " · check the corners" : ""}
+                    </text>
+                  </g>
+                )}
                 {corners.length >= 2 && (
                   <polygon points={corners.map((c) => c.join(",")).join(" ")} fill="rgba(34,197,94,0.12)" stroke="#22c55e" strokeWidth={camera.w / 400} />
                 )}
@@ -248,6 +287,17 @@ export default function CapturePage() {
             )}
           </div>
 
+          {check && !check.busy && (
+            <p className="mt-2 text-sm">
+              {check.error ? <span className="text-red-500">Court check failed: {check.error}</span>
+                : check.result?.found
+                  ? <span>
+                      <Badge tone={check.result.quality === "check" ? "amber" : "green"}>{check.result.sport ? sportLabel(check.result.sport) : "court"} found{check.result.precision != null ? ` · fit ${Math.round(check.result.precision * 100)}%` : ""}</Badge>
+                      <span className="ml-2 text-muted">{check.result.quality === "check" ? "Part of the court may be hidden: drag the corners to fix them, then start." : "Corners are set. Drag any corner to adjust, or just start recording." + (sport === "auto" ? " The sport is a guess (badminton and pickleball courts look alike): pick it in the list if it is wrong." : "")}</span>
+                    </span>
+                  : <span className="text-amber-500">{check.result?.message ?? "No court found."} Move the camera so all four corners show, or use "Mark court corners".</span>}
+            </p>
+          )}
           <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
             {!camera && <button className="btn-primary" onClick={openCamera}>Open camera</button>}
             {camera && phase === "setup" && (
@@ -259,7 +309,8 @@ export default function CapturePage() {
                     {sports.map((s) => <option key={s.sport} value={s.sport}>{sportLabel(s.sport)}</option>)}
                   </select>
                 </label>
-                <button className="btn-ghost" onClick={() => { setCorners([]); setMarking(true); }}>{corners.length === 4 ? "Re-mark court corners" : "Mark court corners (optional)"}</button>
+                <button className="btn-ghost" disabled={check?.busy} onClick={checkCourt}>{check?.busy ? "Checking the court…" : "Check court"}</button>
+                <button className="btn-ghost" onClick={() => { setCorners([]); setMarking(true); setCheck(null); }}>{corners.length === 4 ? "Re-mark court corners" : "Mark court corners (optional)"}</button>
                 {marking && <span className="text-muted">Tap {CORNER_NAMES[corners.length]} ({corners.length + 1}/4)</span>}
                 <button className="btn-primary ml-auto" onClick={start}>Start recording</button>
               </>
