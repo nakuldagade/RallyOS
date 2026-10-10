@@ -103,6 +103,20 @@ export interface PlayerStats {
   zone_pct?: Record<string, number>; // share of tracked time per zone of the own half
   most_zone?: string;                // e.g. "rear-left" (player's point of view)
   most_zone_pct?: number;
+  pulled_away_n?: number;            // own shots that pulled the player away from base
+  stayed_central_n?: number;         // own shots hit from base (not in the recovery average)
+  returned_pct?: number;             // of the pulled-away shots, how often back at base before the reply
+  slowest_return_t?: number[];
+  split_step_n?: number;             // opponent shots that could be judged
+  split_step_detected?: number;
+  split_step_clip_t?: number[];
+  fastest_shot_kmh?: number;
+  avg_shot_kmh?: number;
+  fatigue?: {
+    enough_data: boolean; n_shots: number; note?: string;
+    first_third_return_s?: number; last_third_return_s?: number; return_change_pct?: number | null;
+    speed_change_pct?: number;
+  };
   [k: string]: unknown;
 }
 

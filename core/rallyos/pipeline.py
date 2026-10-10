@@ -44,10 +44,10 @@ class Analyzer:
               ("outcome", "Landings, calls and score"), ("analytics", "Movement stats"), ("render", "Match record"))
     # share of the total time per stage, measured on 10 s clips on a CPU laptop. Finding the court automatically
     # takes several seconds; with the user's corners it is instant, so the bar uses the matching table.
-    STAGE_WEIGHTS = {"calibrate": 0.01, "players": 0.84, "audio": 0.06, "ball": 0.01, "rallies": 0.01,
-                     "outcome": 0.04, "analytics": 0.01, "render": 0.02}
-    STAGE_WEIGHTS_AUTO = {"calibrate": 0.26, "players": 0.62, "audio": 0.06, "ball": 0.01, "rallies": 0.01,
-                          "outcome": 0.02, "analytics": 0.01, "render": 0.01}
+    STAGE_WEIGHTS = {"calibrate": 0.01, "players": 0.74, "audio": 0.05, "ball": 0.01, "rallies": 0.01,
+                     "outcome": 0.03, "analytics": 0.13, "render": 0.02}
+    STAGE_WEIGHTS_AUTO = {"calibrate": 0.26, "players": 0.56, "audio": 0.05, "ball": 0.01, "rallies": 0.01,
+                          "outcome": 0.02, "analytics": 0.08, "render": 0.01}
     SKIPPED_STAGES: tuple[str, ...] = ()
     NOT_COMPUTED: list[str] = []
 
@@ -293,12 +293,58 @@ class Analyzer:
 
         # -- analytics ------------------------------------------------------------------------------------
         emit("analytics", 0.0, "distance, speed and coverage")
-        from rallyos.analytics.movement import movement_stats, zone_time
+        from rallyos.analytics.movement import (base_for, fatigue_trend, movement_speed_between, movement_stats,
+                                                return_stats, return_to_base, zone_time)
+        from rallyos.analytics.splitstep import collect_samples, detect_split_step, summarise, windows_for
+
+        side_of = {1: "near", 2: "far"}
+        hit_events = sorted((e for e in events if e["type"] == "hit"), key=lambda e: e["t"])
+        track_pts: dict[int, list] = {}
+        for tid in (1, 2):
+            seen = [(fr["f"] / fps, fr["players"]) for fr in frames if fr["f"] % self.stride == 0]
+            track_pts[tid] = [(t, tuple(p["court"])) for t, ps in seen for p in ps if p["track_id"] == tid and p.get("court")]
+
+        # return to base after each of the player's own hits (needs the court: positions in metres)
+        returns: dict[int, dict[float, dict]] = {1: {}, 2: {}}
+        if H is not None:
+            for tid in (1, 2):
+                mine = [e for e in hit_events if e.get("track_id") == tid]
+                nxt = {}
+                for e in mine:
+                    reply = next((o for o in hit_events if o["rally_idx"] == e["rally_idx"] and o["t"] > e["t"]
+                                  and o.get("track_id") not in (None, tid)), None)
+                    nxt[e["t"]] = reply["t"] if reply else None
+                returns[tid] = return_to_base(track_pts[tid], [e["t"] for e in mine], nxt, base_for(cfg, side_of[tid]))
+                for e in mine:
+                    r = returns[tid].get(e["t"])
+                    if r:
+                        e["return_to_base_s"], e["returned_to_base"] = r["return_s"], r["returned"]
+
+        # split-step: re-read the frames just before each opponent hit at full frame rate (targeted pose pass)
+        split: dict[int, list[dict]] = {1: [], 2: []}
+        split_note = "not computed (needs the court and the pose model)"
+        if H is not None and detector is not None and os.environ.get("RALLYOS_SPLIT_STEP", "1") != "0":
+            sd, _ = load_pose_detector(device=self.device, imgsz=480)
+            if sd is not None:
+                split_note = "ankle lift of both feet, re-read at full frame rate before each opponent hit"
+                for tid in (1, 2):
+                    opp = [e for e in hit_events if e.get("track_id") not in (None, tid)]
+                    wins = windows_for(opp, fps, n)
+                    emit("analytics", 0.1 + 0.4 * (tid - 1) / 2, f"split-step windows for player {tid}: {len(wins)}")
+                    got = collect_samples(video, sd, tid, wins, frames) if wins else {}
+                    for wi, w in enumerate(wins):
+                        w0, w1 = w["f0"] / fps, w["f1"] / fps
+                        res = detect_split_step(got.get(wi, []), movement_speed_between(track_pts[tid], w0 - 0.3, w1))
+                        res["t"] = w["t_hit"]
+                        split[tid].append(res)
+                        ev = next((e for e in events if e.get("id") == w["event_id"]), None)
+                        if ev is not None:
+                            ev.setdefault("receiver_split_step", {})[str(tid)] = res["split_step"]
 
         per_player: dict[str, dict] = {}
         for tid in (1, 2):
             seen = [(fr["f"] / fps, fr["players"]) for fr in frames if fr["f"] % self.stride == 0]
-            pts = [(t, tuple(p["court"])) for t, ps in seen for p in ps if p["track_id"] == tid and p.get("court")]
+            pts = track_pts[tid]
             frames_seen = sum(1 for _, ps in seen if any(p["track_id"] == tid for p in ps))
             stats = {"tracked_pct": round(frames_seen / max(1, len(seen)), 3),
                      "hits": sum(1 for e in events if e["track_id"] == tid)}
@@ -307,6 +353,14 @@ class Analyzer:
             stats.update(player_speed_stats(events).get(tid, {}))
             if shot_summary:
                 stats["shot_mix"] = shot_mix(events, tid)
+            stats.update(return_stats(returns[tid]))
+            stats.update(summarise(split[tid]))
+            if split[tid] and "split_step_pct" in stats:
+                stats["split_step_clip_t"] = [round(r["t"], 2) for r in split[tid] if r["split_step"] is False][:3]
+            if returns[tid]:
+                shots = [{"t": t, "return_s": None if r.get("was_at_base") else r["return_s"],
+                          "speed_mps": movement_speed_between(pts, t, t + (r["return_s"] or 1.0) + 0.5)} for t, r in returns[tid].items()]
+                stats["fatigue"] = fatigue_trend(shots)
             per_player[str(tid)] = stats
         rally_hits = [r["hits"] for r in rallies]
         players_meta = [{"track_id": tid, "player_id": None, "name": self.names[tid], "side": side,
@@ -335,6 +389,10 @@ class Analyzer:
                 "ball": {**ball_stats(raw, balls, fps), "hit_candidates": len(hits), "tracker": "geometric",
                          "model": "three-frame differencing + physics-consistent tracklets (no trained ball detector)"},
                 "speed": speed_summary,
+                "movement": {"base_radius_m": 1.2, "split_step": split_note,
+                             "return_to_base": "time from the player's own hit until their feet are within 1.2 m of base, "
+                                               "ending at the opponent's reply; shots hit from base are counted apart and "
+                                               "left out of the average; a late arrival counts as not returned"},
                 "shots": shot_summary,
                 "audio": {**audio_info, "method": "band-limited spectral flux, sample-precise onsets (no training)"},
                 "pipeline": {"device": self.device, "imgsz": self.imgsz, "imgsz_basis": pose_note, "player_stride": self.stride,

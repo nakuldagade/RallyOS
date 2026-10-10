@@ -9,8 +9,23 @@ function playerMetrics(s: PlayerStats): Metric[] {
   const out: Metric[] = [];
   if (s.distance_m != null) out.push({ label: "Distance", value: `${num(s.distance_m, 0)} m`, hint: "from court positions" });
   if (typeof s.top_speed_mps === "number") out.push({ label: "Top speed", value: `${num(s.top_speed_mps)} m/s`, hint: "movement" });
-  if (s.avg_return_to_base_s != null) out.push({ label: "Return to base", value: `${num(s.avg_return_to_base_s, 2)} s`, hint: "avg after each shot" });
-  if (s.split_step_pct != null) out.push({ label: "Split-step", value: pct(s.split_step_pct), hint: "of opponent shots" });
+  if (s.avg_return_to_base_s != null) {
+    out.push({ label: "Return to base", value: `${num(s.avg_return_to_base_s, 2)} s`,
+      hint: s.pulled_away_n != null ? `after ${s.pulled_away_n} shots that pulled them away; back in time ${pct(s.returned_pct ?? 0)}` : "avg after each shot" });
+  } else if (s.stayed_central_n) {
+    out.push({ label: "Return to base", value: "stayed central", hint: `${s.stayed_central_n} shots hit from base, none pulled them away` });
+  }
+  if (s.split_step_n != null && s.split_step_detected != null) {
+    out.push({ label: "Split-step", value: `${s.split_step_detected} of ${s.split_step_n}`,
+      hint: "opponent shots, from ankle lift: a guide, not a count" });
+  } else if (s.split_step_pct != null) out.push({ label: "Split-step", value: pct(s.split_step_pct), hint: "of opponent shots" });
+  if (s.fatigue?.enough_data && s.fatigue.return_change_pct != null) {
+    out.push({ label: "Recovery over the match", value: `${s.fatigue.return_change_pct > 0 ? "+" : ""}${s.fatigue.return_change_pct}%`,
+      hint: `${num(s.fatigue.first_third_return_s, 2)} s → ${num(s.fatigue.last_third_return_s, 2)} s, first to last third` });
+  } else if (s.fatigue) {
+    out.push({ label: "Fatigue trend", value: "not enough play", hint: s.fatigue.note ?? "needs more shots" });
+  }
+  if (s.fastest_shot_kmh) out.push({ label: "Fastest shot", value: `≈ ${s.fastest_shot_kmh} km/h`, hint: "average horizontal speed: a lower bound" });
   if (s.avg_smash_kmh) out.push({ label: "Avg smash", value: `≈ ${s.avg_smash_kmh} km/h`, hint: "event-timing estimate" });
   if (typeof s.hits === "number") out.push({ label: "Hits", value: String(s.hits), hint: "vision-only candidates" });
   if (typeof s.tracked_pct === "number") out.push({ label: "Tracked", value: pct(s.tracked_pct), hint: "of sampled frames" });

@@ -85,3 +85,39 @@ def test_job_progress_bar_and_stage_list_move_together():
     auto = {"stages": jobs._fresh_stages(), "taps_given": False, "progress": 0.0}
     jobs.apply_progress(auto, "players", 0.0)                              # finding the court takes real time
     assert auto["progress"] == pytest.approx(Analyzer.STAGE_WEIGHTS_AUTO["calibrate"], abs=1e-3)
+
+
+def _movement_match():
+    stats = {"per_player": {"1": {
+        "avg_return_to_base_s": 1.08, "pulled_away_n": 4, "returned_pct": 0.75, "slowest_return_t": [2.16, 6.16],
+        "split_step_n": 6, "split_step_detected": 2, "split_step_pct": 0.33, "split_step_clip_t": [1.0, 4.2],
+        "most_zone": "rear-centre", "most_zone_pct": 0.38, "fastest_shot_kmh": 74, "shot_mix": {"smash": 1, "serve": 2},
+        "fatigue": {"enough_data": True, "n_shots": 12, "first_third_return_s": 1.1, "last_third_return_s": 1.6,
+                    "return_change_pct": 45, "first_t": 12.0, "last_t": 95.0}}}}
+    events = [{"id": "e1", "type": "hit", "track_id": 1, "t": 2.16, "shot": "smash", "speed_kmh": 74},
+              {"id": "e2", "type": "hit", "track_id": 1, "t": 6.16, "shot": "serve", "speed_kmh": 40}]
+    return {"sport": "badminton", "players": [{"track_id": 1, "name": "Anika"}], "stats": stats, "events": events,
+            "video": {"duration_s": 120.0}}
+
+
+def test_template_coach_cites_movement_stats_with_evidence_clips():
+    data = _movement_match()
+    ins = coach.template_insights(data)
+    by_stat = {i["stat_ids"][0].split(".", 2)[2]: i for i in ins}
+    assert {"avg_return_to_base_s", "fatigue.first_third_return_s", "split_step_detected", "most_zone", "fastest_shot_kmh",
+            "shot_mix.serve"} <= set(by_stat)
+    for i in ins:                                                    # grounded: stats exist, clips given, numbers in the stats
+        assert coach.validate_llm(i, data), i["text"]
+    assert by_stat["avg_return_to_base_s"]["clip_t"] == [2.16, 6.16]                       # the slowest returns
+    assert by_stat["fatigue.first_third_return_s"]["clip_t"] == [12.0, 95.0]
+    assert by_stat["fastest_shot_kmh"]["clip_t"] == [2.16]                                  # the fastest shot itself
+    assert "endurance" in by_stat["fatigue.first_third_return_s"]["text"] and "lower bound" not in by_stat["fastest_shot_kmh"]["text"]
+    assert "guide, not a count" in by_stat["split_step_detected"]["text"]
+
+
+def test_template_coach_says_nothing_it_cannot_support():
+    data = _movement_match()
+    data["stats"]["per_player"]["1"].update(fatigue={"enough_data": False, "n_shots": 3, "note": "needs 9"}, fastest_shot_kmh=None)
+    del data["stats"]["per_player"]["1"]["avg_return_to_base_s"]
+    texts = " ".join(i["text"] for i in coach.template_insights(data))
+    assert "recovery" not in texts and "fastest shot" not in texts and "get back to base" not in texts

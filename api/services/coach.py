@@ -111,25 +111,65 @@ def _moments(data: dict, track_id: int, limit: int = 8) -> list[float]:
     return ts[:limit] or [e["t"] for e in data["events"][:limit]]
 
 
+def _hit_time(data: dict, track_id: int, **where) -> list[float]:
+    """Times of this player's hit events matching all of the given field values (for clip links)."""
+    return [e["t"] for e in data["events"]
+            if e["type"] == "hit" and e.get("track_id") == track_id and all(e.get(k) == v for k, v in where.items())]
+
+
 def template_insights(data: dict) -> list[dict]:
+    """Offline, deterministic insights. Every number written is in the stats, every insight cites its stat ids and
+    links to the moments that show it (the slowest returns, the hits with no split-step, the fastest shot...)."""
     out = []
     names = _names(data)
     for tid, st in data["stats"].get("per_player", {}).items():
         t = int(tid)
-        clip = _moments(data, t, 3)
+        who = names.get(t)
+        base = f"per_player.{tid}"
+        fallback = _moments(data, t, 3)
+
+        def add(text: str, ids: list[str], clip: list[float] | None) -> None:
+            out.append({"player_track_id": t, "stat_ids": [f"{base}.{i}" for i in ids], "clip_t": clip or fallback, "text": text})
+
         if "avg_return_to_base_s" in st:
-            out.append({"player_track_id": t, "stat_ids": [f"per_player.{tid}.avg_return_to_base_s"], "clip_t": clip,
-                        "text": f"{names.get(t)} takes {st['avg_return_to_base_s']} s on average to return to base. "
-                                "Drill: shadow footwork with a recovery step after every shot."})
+            if "pulled_away_n" in st and "returned_pct" in st:
+                add(f"{who} takes {st['avg_return_to_base_s']} s on average to get back to base after being pulled out of position "
+                    f"({st['pulled_away_n']} such shots) and is back in time after {round(st['returned_pct'] * 100)}% of them. "
+                    "Drill: shadow footwork with a push-off and recovery step straight after every shot.",
+                    ["avg_return_to_base_s", "pulled_away_n", "returned_pct"], st.get("slowest_return_t"))
+            else:                                                    # older match files: the average alone
+                add(f"{who} takes {st['avg_return_to_base_s']} s on average to return to base. "
+                    "Drill: shadow footwork with a recovery step after every shot.", ["avg_return_to_base_s"], st.get("slowest_return_t"))
+        fat = st.get("fatigue") or {}
+        if fat.get("enough_data") and fat.get("return_change_pct") is not None:
+            word = "slows" if fat["return_change_pct"] > 0 else "speeds up"
+            add(f"{who}'s recovery {word} over the match: {fat['first_third_return_s']} s in the first third of their shots against "
+                f"{fat['last_third_return_s']} s in the last third ({fat['return_change_pct']}%). "
+                + ("That points to endurance rather than technique: add interval footwork work." if fat["return_change_pct"] > 15
+                   else "No sign of fading."),
+                ["fatigue.first_third_return_s", "fatigue.last_third_return_s", "fatigue.return_change_pct"],
+                [fat["first_t"], fat["last_t"]])
         if "split_step_pct" in st:
-            out.append({"player_track_id": t, "stat_ids": [f"per_player.{tid}.split_step_pct"], "clip_t": clip,
-                        "text": f"{names.get(t)} uses a split-step on {round(st['split_step_pct'] * 100)}% of opponent shots. "
-                                "Focus: time the split-step to the opponent's contact."})
+            if "split_step_detected" in st and "split_step_n" in st:
+                add(f"A split-step (both feet off the ground together as the opponent hits) was seen before {st['split_step_detected']} of "
+                    f"{st['split_step_n']} opponent shots against {who}. Focus: time a small hop to land as the opponent makes contact. "
+                    "This is read from ankle height at ordinary video frame rates, so treat it as a guide, not a count.",
+                    ["split_step_detected", "split_step_n"], st.get("split_step_clip_t"))
+            else:                                                    # older match files: the rate alone
+                add(f"{who} uses a split-step on {round(st['split_step_pct'] * 100)}% of opponent shots. "
+                    "Focus: time the split-step to the opponent's contact.", ["split_step_pct"], None)
+        if st.get("most_zone"):
+            add(f"{who} spends the most time in the {st['most_zone'].replace('-', ' ')} zone ({round(st['most_zone_pct'] * 100)}% of the tracked time).",
+                ["most_zone", "most_zone_pct"], fallback)
+        if st.get("fastest_shot_kmh") is not None:
+            fast = next((e["t"] for e in data["events"] if e.get("track_id") == t and e.get("speed_kmh") == st["fastest_shot_kmh"]), None)
+            add(f"{who}'s fastest shot averaged about {st['fastest_shot_kmh']} km/h from contact to the next contact or landing "
+                "(an average horizontal speed, so the shuttle's peak speed is higher).",
+                ["fastest_shot_kmh"], [fast] if fast is not None else None)
         mix = st.get("shot_mix") or {}
         if mix:
             top = max(mix, key=mix.get)
-            out.append({"player_track_id": t, "stat_ids": [f"per_player.{tid}.shot_mix.{top}"], "clip_t": clip,
-                        "text": f"{names.get(t)}'s most-used shot is the {top} ({mix[top]} times)."})
+            add(f"{who}'s most-used shot is the {top} ({mix[top]} times).", [f"shot_mix.{top}"], _hit_time(data, t, shot=top)[:3])
     return out
 
 
