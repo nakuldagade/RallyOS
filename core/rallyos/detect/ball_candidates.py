@@ -42,8 +42,12 @@ class BallCandidateDetector:
         return cv2.GaussianBlur(cv2.cvtColor(small, cv2.COLOR_BGR2GRAY), (3, 3), 0)
 
     def candidates(self, prev: np.ndarray, cur: np.ndarray, nxt: np.ndarray, player_boxes: list,
-                   x_range: tuple[float, float] | None = None) -> list[tuple[float, float, float]]:
-        """[(x, y, score)] in original pixels for the middle frame `cur`, best first."""
+                   x_range: tuple[float, float] | None = None,
+                   roi: np.ndarray | None = None) -> list[tuple[float, float, float]]:
+        """[(x, y, score)] in original pixels for the middle frame `cur`, best first.
+
+        roi: optional uint8 mask in original pixels (calibration/roi.ball_region): only the court and the
+        air above it count; crowd and screen motion outside it are ignored."""
         s = self.scale
         hh, ww = cur.shape
         lin = ww / REF_WIDTH
@@ -78,6 +82,8 @@ class BallCandidateDetector:
                 continue
             ox, oy = cx / s, cy / s
             if x_range and not (x_range[0] <= ox <= x_range[1]):
+                continue
+            if roi is not None and not roi[min(roi.shape[0] - 1, int(oy)), min(roi.shape[1] - 1, int(ox))]:
                 continue
             score = float(motion[y:y + h, x:x + w].mean()) * (0.5 + bright / 510.0)
             out.append((round(float(ox), 1), round(float(oy), 1), round(score, 2)))

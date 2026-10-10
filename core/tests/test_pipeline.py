@@ -51,7 +51,7 @@ def test_pipeline_end_to_end_without_pose(tmp_path, monkeypatch):
     _synthetic_clip(clip)
     stages = []
     out = Analyzer(sport="badminton", taps=TAPS, match_id="m_test").run(
-        str(clip), out_dir=str(tmp_path / "out"), progress=lambda s, p: stages.append(s))
+        str(clip), out_dir=str(tmp_path / "out"), progress=lambda s, p, note=None: stages.append(s))
 
     m = json.loads((tmp_path / "out" / "match.json").read_text(encoding="utf-8"))
     tracks = json.loads((tmp_path / "out" / "tracks.json").read_text(encoding="utf-8"))
@@ -62,4 +62,4 @@ def test_pipeline_end_to_end_without_pose(tmp_path, monkeypatch):
     assert m["stats"]["ball"]["hit_candidates"] >= 1                     # the reversal at frame 30
     assert any(abs(e["t"] * 25 - 30) <= 3 for e in m["events"]) or not m["rallies"]  # 1 hit alone is not a rally
     assert len(tracks["frames"]) == 60 and m["video"]["sha256"]
-    assert stages[0] == "calibrate" and stages[-1] == "render"
+    assert stages[0] == "calibrate" and stages[-1] == "done" and "outcome" in stages

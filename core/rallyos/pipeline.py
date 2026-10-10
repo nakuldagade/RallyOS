@@ -37,12 +37,23 @@ PLAYER_COLORS = {1: "#3b82f6", 2: "#ef4444"}
 
 
 class Analyzer:
+    # (id, label) in execution order, and each stage's share of the total time. progress callbacks report
+    # (stage, fraction of that stage, note); a note starting with "skipped:" marks the stage as skipped.
+    STAGES = (("calibrate", "Court calibration"), ("players", "Players, pose and shuttle search"),
+              ("audio", "Hit sounds"), ("ball", "Shuttle trajectory"), ("rallies", "Hits and rallies"),
+              ("outcome", "Landings, calls and score"), ("analytics", "Movement stats"), ("render", "Match record"))
+    # share of the total time per stage, measured on 10 s clips on a CPU laptop. Finding the court automatically
+    # takes several seconds; with the user's corners it is instant, so the bar uses the matching table.
+    STAGE_WEIGHTS = {"calibrate": 0.01, "players": 0.84, "audio": 0.06, "ball": 0.01, "rallies": 0.01,
+                     "outcome": 0.04, "analytics": 0.01, "render": 0.02}
+    STAGE_WEIGHTS_AUTO = {"calibrate": 0.26, "players": 0.62, "audio": 0.06, "ball": 0.01, "rallies": 0.01,
+                          "outcome": 0.02, "analytics": 0.01, "render": 0.01}
     SKIPPED_STAGES: tuple[str, ...] = ()
     NOT_COMPUTED = ["shot types", "speeds"]
 
     def __init__(self, sport: str = "auto", device: str | None = None, taps: list | None = None,
                  names: dict[int, str] | None = None, match_id: str | None = None,
-                 imgsz: int | None = None, stride: int = 3):
+                 imgsz: int | None = None, stride: int = 3, auto_calibrate: bool = True):
         self.sport = "badminton" if sport in (None, "", "auto") else sport
         self.sport_given = sport not in (None, "", "auto")
         self.device = get_device(device)
@@ -52,9 +63,10 @@ class Analyzer:
         # 1280 px input finds the far player (~20 px tall at 640); RALLYOS_MAX_WIDTH lowers it for quick CPU runs
         self.imgsz = imgsz or int(os.environ.get("RALLYOS_MAX_WIDTH") or 1280)
         self.stride = max(1, stride)
+        self.auto_calibrate = auto_calibrate     # find the court lines automatically when no taps are given
 
     def run(self, video_path: str, out_dir: str | None = None,
-            progress: Callable[[str, float], None] | None = None) -> str:
+            progress: Callable[[str, float, str | None], None] | None = None) -> str:
         """Process a clip, writing each stage's output (and finally match.json) into out_dir. Returns out_dir."""
         import cv2
 
@@ -71,31 +83,75 @@ class Analyzer:
         from rallyos.videoio import sha256_file, video_info
 
         t0 = time.time()
-        emit = progress or (lambda stage, frac: None)
+        clock = {"stage": None, "t": time.time()}
+        stage_seconds: dict[str, float] = {}
+
+        def emit(stage: str, frac: float, note: str | None = None) -> None:
+            if stage != clock["stage"]:
+                if clock["stage"]:
+                    stage_seconds[clock["stage"]] = round(stage_seconds.get(clock["stage"], 0.0) + time.time() - clock["t"], 2)
+                clock.update(stage=stage, t=time.time())
+            if progress:
+                progress(stage, frac, note)
+
         video = Path(video_path)
         match_id = self.match_id or f"m_{video.stem}"
         out = Path(out_dir or Path("demo/out") / match_id)
         out.mkdir(parents=True, exist_ok=True)
-        cfg = load_sport(self.sport)
         info = video_info(video)
         fps, W, Hh = info["fps"], info["width"], info["height"]
 
-        # -- calibrate --------------------------------------------------------------------------------
-        emit("calibrate", 0.02)
-        calib = homography_from_taps(self.taps, cfg) if self.taps else dict(NO_CALIBRATION)
-        H = np.array(calib["homography"]) if self.taps else None
+        # -- calibrate: the user's 4 taps, else the automatic Court Fingerprint ---------------------------
+        emit("calibrate", 0.0, "starting")
+        taps, auto, auto_note = self.taps, None, None
+        if taps is None and self.auto_calibrate:
+            from rallyos.calibration.court_fit import detect_court
+            from rallyos.videoio import sample_frames
+
+            emit("calibrate", 0.15, "reading frames to find the court lines")
+            try:
+                auto = detect_court(sample_frames(video, 9, span_s=3.0), [self.sport] if self.sport_given else None)
+            except Exception as exc:                      # never let the optional auto step stop the analysis
+                auto, auto_note = None, f"automatic court detection failed: {exc}"
+            if auto is None and auto_note is None:
+                auto_note = "no court found automatically: tap the 4 corners on the match page"
+            elif auto is not None and auto["quality"] == "high":
+                taps = auto["corners_px"]
+                if not self.sport_given:
+                    self.sport = auto["sport"]
+            elif auto is not None:
+                auto_note = (f"court proposed but not certain (precision {auto['precision']:.0%}): "
+                             "not applied, check or tap the corners on the match page")
+        emit("calibrate", 0.8, "building the court model")
+        cfg = load_sport(self.sport)
+        calib = homography_from_taps(taps, cfg) if taps else dict(NO_CALIBRATION)
+        if auto is not None and taps is not None and self.taps is None:
+            calib["method"] = "auto"
+            calib["reprojection_error_px"] = auto["reprojection_error_px"]
+        if auto is not None:
+            calib["auto"] = {k: auto[k] for k in ("sport", "sport_confidence", "fit_score", "precision", "recall",
+                                                  "quality", "corners_px", "ranking")}
+        if auto_note:
+            calib["note"] = auto_note
+        H = np.array(calib["homography"]) if taps else None
         camera = camera_from_homography(H, W, Hh) if H is not None else None
         if camera:
             calib["focal_px"] = camera["focal_px"]
             calib["camera_position_m"] = camera["position_m"]
         _dump(out / "stage_calibration.json", calib)
-        x_range = None
-        if self.taps:
-            xs = [p[0] for p in self.taps]
-            pad = 0.15 * W
-            x_range = (min(xs) - pad, max(xs) + pad)
+        # look for players / the shuttle only on and around the tapped court (calibration/roi.py)
+        from rallyos.calibration import roi as court_roi
+
+        player_poly = court_roi.player_region(H, cfg, W, Hh, camera) if H is not None else None
+        ball_poly = court_roi.ball_region(H, cfg, W, Hh, camera) if H is not None else None
+        pose_box = court_roi.bbox(player_poly, W, Hh) if player_poly is not None else None
+        ball_mask = court_roi.mask(ball_poly, W, Hh) if ball_poly is not None else None
+        _dump(out / "stage_roi.json", {"player_region_px": player_poly.round(1).tolist() if player_poly is not None else None,
+                                       "pose_crop_px": pose_box,
+                                       "ball_region_px": ball_poly.round(1).tolist() if ball_poly is not None else None})
 
         # -- players + ball candidates (one decode pass) ------------------------------------------------
+        emit("players", 0.0, "loading the pose model")
         detector, pose_backend = load_pose_detector(device=self.device, imgsz=self.imgsz)
         _dump(out / "stage_players_backend.json", {"available": detector is not None, "backend": pose_backend})
         balls_det = BallCandidateDetector()
@@ -111,18 +167,18 @@ class Analyzer:
             if not ok:
                 break
             if detector is not None and f % self.stride == 0:
-                dets = detector(frame)
+                dets = court_roi.cropped(detector, frame, pose_box) if pose_box else detector(frame)
                 sampled.append((f, dets))
                 last_boxes = [d["bbox"] for d in dets]   # mask everyone (players and officials) for the ball search
             window.append((balls_det.prepare(frame), last_boxes))
             if len(window) == 3:
                 (g0, _), (g1, boxes), (g2, _) = window
-                cands.append(balls_det.candidates(g0, g1, g2, boxes, x_range))
+                cands.append(balls_det.candidates(g0, g1, g2, boxes, roi=ball_mask))
             elif f == 0:
                 cands.append([])
             f += 1
             if f % 10 == 0:
-                emit("players", min(0.95, f / n_total))
+                emit("players", min(0.98, f / n_total), f"frame {f} of {n_total}")
         cap.release()
         n = f
         if n == 0:
@@ -130,15 +186,8 @@ class Analyzer:
         cands.append([])                           # last frame has no successor
         cands = cands[:n]
 
-        # -- audio onsets ---------------------------------------------------------------------------------
-        emit("audio", 0.1)
-        acfg = cfg.get("audio", {})
-        samples, audio_status = load_audio(video)
-        onsets = detect_onsets(samples, 44100, min_gap_s=acfg.get("min_gap_s", 0.15),
-                               band_hz=acfg.get("band_hz", (1500, 10000))) if samples is not None else []
-        _dump(out / "stage_audio.json", {"status": audio_status, "sample_rate": 44100, "onsets": onsets})
-
         # -- who is a player: drop static people (officials), then court + size checks per frame --------
+        emit("players", 0.99, "choosing the two players")
         statics = find_static_people([d for _, d in sampled], Hh)
         selector = PlayerSelector(H, cfg["court"], Hh, statics)
         roles_at: dict[int, tuple[list, list]] = {}
@@ -157,8 +206,18 @@ class Analyzer:
                                            "sampled_frames": len(sampled)})
         _dump(out / "stage_ball_candidates.json", {"fps": fps, "candidates": cands})
 
+        # -- audio onsets ---------------------------------------------------------------------------------
+        emit("audio", 0.1, "reading the soundtrack")
+        acfg = cfg.get("audio", {})
+        samples, audio_status = load_audio(video)
+        onsets = detect_onsets(samples, 44100, min_gap_s=acfg.get("min_gap_s", 0.15),
+                               band_hz=acfg.get("band_hz", (1500, 10000))) if samples is not None else []
+        _dump(out / "stage_audio.json", {"status": audio_status, "sample_rate": 44100, "onsets": onsets})
+
+        emit("audio", 1.0, f"skipped: {audio_status}" if audio_status != "ok" else f"{len(onsets)} hit sounds found")
+
         # -- ball track -----------------------------------------------------------------------------------
-        emit("ball", 0.2)
+        emit("ball", 0.0, "linking shuttle candidates into a path")
         raw = link_candidates(cands, width=W, fps=fps)
         balls = fill_short_gaps(raw, max_gap=5)
         for fr, b in zip(frames, balls):
@@ -167,7 +226,7 @@ class Analyzer:
         _dump(out / "tracks.json", tracks, compact=True)
 
         # -- events ---------------------------------------------------------------------------------------
-        emit("rallies", 0.3)
+        emit("rallies", 0.0, "finding hits and splitting rallies")
         hits = attribute_hits(detect_hits(balls, fps=fps, width=W), frames, Hh)
         hits, audio_info = fuse_audio(hits, onsets, fps, frames, camera_m=camera["position_m"] if camera else None,
                                       allow_audio_only=not cfg["projectile"].get("bounces", False),
@@ -192,6 +251,7 @@ class Analyzer:
             })
 
         # -- rally outcome: landing -> line call -> suggested winner -> score -------------------------------
+        emit("outcome", 0.0, "finding landings and making calls")
         from rallyos.analytics.linecall import DISPUTE_BELOW, resolve_rally_ends, score_rallies
         from rallyos.render.clips import render_review_clip
 
@@ -222,8 +282,8 @@ class Analyzer:
                                           "rallies": rallies})
 
         # -- analytics ------------------------------------------------------------------------------------
-        emit("analytics", 0.5)
-        from rallyos.analytics.movement import movement_stats
+        emit("analytics", 0.0, "distance, speed and coverage")
+        from rallyos.analytics.movement import movement_stats, zone_time
 
         per_player: dict[str, dict] = {}
         for tid in (1, 2):
@@ -233,6 +293,7 @@ class Analyzer:
             stats = {"tracked_pct": round(frames_seen / max(1, len(seen)), 3),
                      "hits": sum(1 for e in events if e["track_id"] == tid)}
             stats.update(movement_stats(pts))
+            stats.update(zone_time([c for _, c in pts], cfg, "near" if tid == 1 else "far"))
             per_player[str(tid)] = stats
         rally_hits = [r["hits"] for r in rallies]
         players_meta = [{"track_id": tid, "player_id": None, "name": self.names[tid], "side": side,
@@ -240,11 +301,12 @@ class Analyzer:
                         if per_player[str(tid)]["tracked_pct"] > 0]
 
         # -- render ---------------------------------------------------------------------------------------
-        emit("render", 0.8)
+        emit("render", 0.0, "writing the match record")
         match = {
             "schema_version": "1.0", "match_id": match_id, "title": None, "sport": self.sport,
-            "sport_confidence": None,
-            "sport_source": "chosen by user" if self.sport_given else "default (automatic detection not built yet)",
+            "sport_confidence": auto["sport_confidence"] if auto and self.sport == auto["sport"] else None,
+            "sport_source": "chosen by user" if self.sport_given else
+                            ("auto-detected (Court Fingerprint)" if auto and self.sport == auto["sport"] else "default (not detected)"),
             "video": {"src": f"/media/{match_id}/source.mp4", "overlay": None, "fps": fps, "width": W, "height": Hh,
                       "duration_s": duration, "sha256": sha256_file(video)},
             "calibration": calib,
@@ -265,7 +327,7 @@ class Analyzer:
                              "static_people_ignored": statics,
                              "ignored_detections": ignored_counts,
                              "players_skipped_reason": None if detector is not None else pose_backend,
-                             "processing_s": round(time.time() - t0, 1),
+                             "processing_s": round(time.time() - t0, 1), "stage_seconds": stage_seconds,
                              "not_computed": self.NOT_COMPUTED + ([] if detector is not None else ["players + pose"])
                              + ([] if H is not None else ["line calls + score (need court calibration: 4 taps)"])},
             },
@@ -273,7 +335,8 @@ class Analyzer:
             "insights": [],
         }
         write_outputs(out, match, tracks, video=video)
-        emit("render", 1.0)
+        emit("render", 1.0, "done")
+        emit("done", 1.0)
         return str(out)
 
 
@@ -294,7 +357,7 @@ def main(argv: list[str] | None = None) -> None:
     t0 = time.time()
     out = Analyzer(sport=args.sport, device=args.device, taps=json.loads(args.taps) if args.taps else None,
                    imgsz=args.imgsz, stride=args.stride).run(
-        args.video, out_dir=args.out, progress=lambda s, p: print(f"\r{s:<10} {p:4.0%}", end="", flush=True))
+        args.video, out_dir=args.out, progress=lambda s, p, note=None: print(f"\r{s:<10} {p:4.0%} {note or '':<44}", end="", flush=True))
     print(f"\nwrote {out} in {time.time() - t0:.0f} s")
 
 

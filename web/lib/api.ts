@@ -2,7 +2,7 @@
 // NEXT_PUBLIC_USE_MOCK=true reads /mock/*.json; otherwise match + tracks fall back to the mock
 // when the backend is unreachable, so the demo never shows a blank page.
 import type {
-  Booking, CoachReport, CourtRow, DisputeDetail, DrawMatch, Health, MatchJSON, MatchSummary, Player,
+  Booking, CourtDetection, CoachReport, CourtRow, DisputeDetail, DrawMatch, Health, MatchJSON, MatchSummary, Player,
   Prediction, RatingPoint, Score, SportConfig, Suggestion, Tournament, Tracks,
 } from "./types";
 
@@ -100,4 +100,13 @@ export const api = {
     return request<{ job_id: string }>("/v1/videos", { method: "POST", body: fd });
   },
   jobStreamUrl: (id: string) => `${API}/v1/jobs/${q(id)}`,
+  /** Automatic Court Fingerprint on one frame (JPEG). sport "auto" tries every sport. */
+  detectCourt: (frame: Blob, sport = "auto") => {
+    const fd = new FormData();
+    fd.append("frame", frame, "frame.jpg");
+    fd.append("sport", sport);
+    return request<CourtDetection>("/v1/calibrate", { method: "POST", body: fd });
+  },
+  recalibrate: (id: string, taps: [number, number][], sport?: string) =>
+    request<{ job_id: string }>(`/v1/matches/${q(id)}/recalibrate`, post({ taps, sport })),
 };

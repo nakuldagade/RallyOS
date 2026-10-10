@@ -30,7 +30,7 @@ export default function VideoOverlay({ match, tracks, lines, courtSize, seek, on
   const [mode, setMode] = useState<"video" | "synthetic">(src ? "video" : "synthetic");
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState(1);
-  const [showIgnored, setShowIgnored] = useState(true);
+  const [showIgnored, setShowIgnored] = useState(false);   // filtered-out people: off by default
   const [shown, setShown] = useState(0);
   const tRef = useRef(0);
   const playingRef = useRef(false);

@@ -18,6 +18,8 @@ export interface Calibration {
   focal_px?: number | null;
   reprojection_error_px?: number | null;
   camera_position_m?: [number, number, number] | null; // from self-calibration (x, y, height)
+  note?: string | null;                                // why no automatic calibration was applied
+  auto?: { sport: string; sport_confidence: number; fit_score: number; precision: number; recall: number; quality: string } | null;
 }
 
 export interface PlayerRef {
@@ -93,6 +95,9 @@ export interface PlayerStats {
   shot_mix?: Record<string, number>;
   avg_smash_kmh?: number;
   heatmap_url?: string;
+  zone_pct?: Record<string, number>; // share of tracked time per zone of the own half
+  most_zone?: string;                // e.g. "rear-left" (player's point of view)
+  most_zone_pct?: number;
   [k: string]: unknown;
 }
 
@@ -293,6 +298,7 @@ export interface SportConfig {
     lines: CourtLine[];
     base_position?: XY;
     fingerprint_lines?: string[];
+    zones?: Record<string, { y_from_net_m?: [number, number] }>;
   };
   net?: { height_center?: number; height_post?: number } | null;
   projectile: { kind: string; size_m: number; bounces?: boolean; motion_model?: string; wall_rebounds?: boolean };
@@ -349,10 +355,38 @@ export interface DrawMatch {
   p2?: string | null;
 }
 
+export interface JobStage {
+  id: string;
+  label: string;
+  state: "pending" | "active" | "done" | "skipped" | "failed";
+  frac: number;          // 0..1 within this stage
+  note: string | null;   // what it is doing, or why it was skipped
+  seconds: number | null;
+}
+
+export interface CourtDetection {
+  found: boolean;
+  method?: string;
+  message?: string;
+  sport?: string;
+  sport_confidence?: number;
+  quality?: "high" | "check";
+  fit_score?: number;
+  precision?: number;
+  recall?: number;
+  corners_px?: [number, number][];   // near-left, near-right, far-right, far-left (frame pixels)
+  width?: number;
+  height?: number;
+  ranking?: [string, number][];
+  focal_px?: number | null;
+  camera_position_m?: [number, number, number] | null;
+}
+
 export interface Job {
   job_id: string;
   status: "queued" | "running" | "done" | "failed";
   stage: string | null;
+  stages?: JobStage[];
   progress: number;
   match_id: string | null;
   error: string | null;

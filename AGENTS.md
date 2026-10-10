@@ -16,6 +16,7 @@ This file is the single source of truth for the project. The product and build p
 9. **Environment:** Windows 11. Python 3.11, Node 18+. Use paths that work on Windows. Download model weights ahead of time; don't depend on venue Wi-Fi.
 10. **Testing:** unit-test the scoring rules for every sport and the court-template fitting (on computer-generated courts with a known H). Follow §20 to verify the full system.
 11. **One machine, CPU first.** Everything runs locally on this laptop. Code must still run on CUDA too if a GPU is ever available: never hard-code `cuda`; pick the device with `rallyos.device.get_device()`.
+12. **Keep the "Build status and next steps" section below current.** At the end of every work block, move finished items to done, record measured numbers, list new limits, and re-order the next steps. Never mark something done that has only been tested on generated data without saying so.
 
 ## Development setup: one laptop
 
@@ -26,7 +27,7 @@ All coding, processing, testing and the demo happen on this laptop, on CPU. Ther
 | Writes | All code: `core/`, `api/`, `web/`, tests, seed data |
 | Runs | Frontend (`npm run dev`), backend (`uvicorn`), unit tests, and the pipeline on uploaded clips |
 | Python deps | `requirements.txt` (CPU build of torch) |
-| Pipeline speed | Roughly 1.5–2.5 × the clip length on CPU (pose at 1280 px, every 3rd frame). Keep demo clips short (10–60 s) and precompute them |
+| Pipeline speed | About 2–2.7 × the clip length on CPU (measured on a 10 s 1080p clip; pose at 1280 px on the court area only, every 3rd frame; the automatic court search adds a few seconds). Keep demo clips short (10–60 s) and precompute them |
 
 **How processing works**
 - **Live:** the web upload page sends the video to the backend, which runs `rallyos.pipeline.Analyzer` in-process and streams progress.
@@ -51,6 +52,61 @@ All coding, processing, testing and the demo happen on this laptop, on CPU. Ther
 - **Pitch slide:** compare the plug-in against the geometric tracker on our own phone footage. The model was trained on broadcast video, so it needs proving on amateur phone angles. Report both results honestly.
 
 **Demo day:** present from the laptop using precomputed outputs in `demo/out/` (imported into the app). Run a live upload only with a short clip, since processing is on CPU.
+
+---
+
+## Build status and next steps (keep this section current: update it at the end of every work block)
+
+Status key: ✅ done and verified · 🟡 built but only partly proven (see the note) · ❌ not built. Block names B1–B7 are the ones in §12.
+
+### Where the build stands
+
+| Block | Status | What exists |
+|---|---|---|
+| **B1 Foundation** | ✅ | Git, scaffold, `.gitignore`, `.env.example`, 6 sport YAMLs (court, net, projectile, scoring, shots, plus `audio`, `in_bounds`, `max_height_m`), mock `match.json` + `tracks.json`, `rallyos.device.get_device()`, YAML-driven scoring engine for all 6 sports (3 families) with tests |
+| **B2 App shell** | 🟡 | FastAPI + SQLModel + SQLite: matches, rallies, events, tracks, disputes, players, coach, matchmaking, predict, courts, bookings, tournaments, sports, calibrate, videos (upload + SSE job progress), score confirm, recalibrate. Web: home, matches, match page, report, upload, disputes, players, coach, play, courts, tournaments, sports, developers. ❌ Missing pages: `capture`, `score` |
+| **B3 Court + players** | ✅ | **Automatic Court Fingerprint** (`calibration/court_lines.py`, `court_fit.py`): line mask, line merging, rectangle hypotheses, per-sport template fit, sub-pixel refinement, sport detection, quality flag, draggable corners in the web UI; 4-tap fallback; camera self-calibration (focal length + camera position, `camera.py`); court regions of interest (`roi.py`: players and shuttle are only looked for on/around the court); YOLO11n-pose (ONNX fallback); player selector (static officials, court margins, size check); movement stats, live + whole-clip heatmap, zones |
+| **B4 Shuttle + hits + rallies** | 🟡 | Geometric shuttle tracker (track F1 0.82 against RacketVision on 2 clips), tracklet linker, hit detection (F1 0.74), nearest-wrist hitter, rally segmentation, `api.import_match`, upload page with per-stage progress. 🟡 Audio onsets (`audio/onsets.py`) + audio/video fusion are built and unit-tested, but **no real clip with sound has been run yet** (all demo clips have no audio track) |
+| **B5 Intelligence** | 🟡 | ✅ Landing detection → height-corrected court point → IN / OUT / TOO CLOSE with an uncertainty ellipse → suggested rally winner → score through the rules engine → Fair-Play Replay clips for calls under 90% → SHA-256 of the source video → evidence-linked coach (Claude with a number-grounding validator, template fallback). 🟡 IN/OUT is only proven on generated scenes: both calibrated real clips stop before the shuttle lands, so they correctly give no call. ❌ Not built: speed with an error band (§4.5), shot-type rules (§4.6), return-to-base / split-step / fatigue (§4.8) |
+| **B6 Network** | 🔵 | Glicko-2 with evidence weights, matchmaking, explainable prediction, player / coach / play / courts / tournaments pages, all on seed data (logic is real, data is sample). ❌ Meetups |
+| **B7 Multi-sport + SDK** | 🟡 | `pip install -e core/`, `developers` page, `sports` page with YAML viewer, RacketVision plug-in (precomputed results). The court fingerprint recognises all 6 templates on generated courts and found a real table-tennis table. 🟡 No full real run yet on tennis / pickleball / padel / squash video. ❌ `volleyball.yaml` stub |
+
+Tests: `pytest` runs `core/tests` + `api/tests` (166 passing, about 1–2 minutes; the court-fit tests are the slow ones). The web app passes `tsc --noEmit`.
+
+### Measured so far (honest numbers, for the pitch and Q&A)
+
+| Metric (§14) | Target | Measured |
+|---|---|---|
+| Court calibration (automatic) | ≥ 90% of clips, under 5 px | On 4 broadcast badminton clips (1920×1080): 3 within 7 px of hand-checked corners (2 of them flagged "high quality"), 1 wrong on the far side (far baseline hidden behind the net tape) and correctly flagged "check". Table-tennis table found (flagged "check"). Auto-detect with taps given: 100% by definition |
+| Sport detection | n/a | Correct on all 4 badminton clips and the table-tennis clip; generated courts: badminton, tennis, pickleball identified from inner lines |
+| Shuttle track F1 vs RacketVision | recall ≥ 0.70 / precision ≥ 0.85 | recall 0.72, precision 0.94 |
+| Hit detection F1 | ≥ 0.85 | 0.74 (vision only); audio fusion not yet measured on real sound |
+| Processing speed | ≤ 2.5 × clip length | about 2.7 × on a 10 s, 25 fps, 1080p clip including automatic court detection (about 2 × with corners given) |
+| Everything else in §14 | | not measured yet: no hand-labelled evaluation set exists |
+
+### Known limits (state these openly)
+
+- Doubles: one player per half is tracked, so a doubles clip reports only 2 of the 4 players.
+- Side-on camera views (court length running across the image) are not proposed by the automatic fit; use the corner tool. Camera zoom or cuts inside a clip break a single calibration (typical of broadcast footage).
+- Automatic court fit relies on the court lines being visible: a far baseline hidden by the net or by graphics gives a wrong far edge. The fit is flagged "check" when its precision is under 88%, and the corners can then be dragged. Without corners, the pipeline only applies a "high" fit.
+- No line call or score on real footage until a clip runs until the shuttle lands. A shuttle lost against the net, still in the air, or at the end of the clip gets **no** call.
+- Speeds, shot types, return-to-base, split-step and fatigue are not computed; the UI says so and shows nothing instead of a guess.
+- Hit times from audio are only tested on generated clicks.
+
+### Next steps, in order (each ends with tests, a commit and a push)
+
+1. **Commit and push the current work** (court auto-detect, progress rework, heatmap/zones, outcome stage).
+2. **Speed with an error band (§4.5, event timing).** Hit point → landing point distance on the court divided by the flight time (audio when present, else frames). Show `≈ N km/h ± x%`, hide it when tracking is poor. Skip the flight-plane 3D unless time is left (cut list item 1).
+3. **Shot types by rules (§4.6).** Classify from the YAML thresholds (smash, clear, drop, net, lift, drive) using hit and landing zones, flight time and wrist height; every label carries a one-sentence reason.
+4. **Movement intelligence (§4.8).** Return-to-base time, split-step %, fatigue curve; feed zones, speeds and shot mix to the coach with `stat_ids` and `clip_t`.
+5. **Doubles support.** Track and name 4 players (clothing colour + side), per-player stats, scoring with `doubles=True`.
+6. **Multi-sport proof on video.** Run one real table-tennis, one pickleball and one tennis clip through the automatic fit and the pipeline; fix what breaks; add `volleyball.yaml` as the "generalises" stub.
+7. **Run a clip with sound** (and one that runs until the shuttle lands) to measure audio fusion and show a real IN/OUT call and dispute replay.
+8. **Mobile / offline / voice (PS requirement).** `capture` page (framing guide), `score` page (offline score keeper, IndexedDB, voice scoring), then meetups if time allows (cut list items 4–5).
+9. **Evaluation (§14).** Hand-label about 300 frames and 20 rallies (for measurement only), add the evaluation script, fill the metrics table above.
+10. **Freeze (§12 13–14 h).** Precompute every demo clip into `demo/out/`, import, record the backup demo video, rehearse §13.
+
+Never cut: the end-to-end replay, the match dashboard, the multi-sport config demo. Cut list order is unchanged (§12).
 
 ---
 

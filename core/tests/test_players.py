@@ -106,3 +106,17 @@ def test_uncalibrated_picks_two_largest_non_static():
     roles, ignored = sel.select([big_static, near, far, person_px(100, 200, 40)])
     assert roles[1]["bbox"] == near["bbox"] and roles[2]["bbox"] == far["bbox"]
     assert {i["reason"] for i in ignored} == {"static (official / spectator)", "too small (far spectator)"}
+
+
+def test_zone_time_from_players_point_of_view():
+    from rallyos.analytics.movement import zone_of, zone_time
+    from rallyos.sports import load_sport
+
+    cfg = load_sport("badminton")
+    assert zone_of((0.5, 0.5), cfg, "near") == "rear-left"       # near player, deep on camera-left
+    assert zone_of((0.5, 12.9), cfg, "far") == "rear-right"      # far player faces the camera: mirrored
+    assert zone_of((3.05, 6.0), cfg, "near") == "front-centre"
+    assert zone_of((3.0, 10.0), cfg, "near") is None             # opponent's half
+    z = zone_time([(0.5, 0.5)] * 6 + [(3.05, 6.0)] * 2 + [(5.5, 3.0)] * 2, cfg, "near")
+    assert z["most_zone"] == "rear-left" and z["most_zone_pct"] == 0.6 and z["zone_pct"]["mid-right"] == 0.2
+    assert zone_time([], cfg, "near") == {}

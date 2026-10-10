@@ -51,12 +51,22 @@ async def job_progress(job_id: str):
     if not jobs.get_job(job_id):
         raise HTTPException(404, "job not found")
 
+    def public(job: dict) -> str:
+        view = {**job, "stages": [{k: v for k, v in st.items() if not k.startswith("_")} for st in job["stages"]]}
+        return json.dumps(view)
+
     async def stream():
+        last, idle = None, 0
         while True:
             job = jobs.get_job(job_id)
-            yield f"data: {json.dumps(job)}\n\n"
+            now = public(job)
+            if now != last or idle >= 20:                    # push every change at once; a heartbeat keeps the link alive
+                yield f"data: {now}\n\n"
+                last, idle = now, 0
+            else:
+                idle += 1
             if job["status"] in ("done", "failed"):
                 break
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(0.25)
 
     return StreamingResponse(stream(), media_type="text/event-stream")

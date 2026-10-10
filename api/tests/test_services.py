@@ -60,3 +60,28 @@ def test_prediction_symmetry_and_factors():
     assert ab["factors"][0]["factor"] == "rating_gap"
     with_h2h = predict.win_probability(a, b, (0, 3))
     assert with_h2h["p_a_wins"] < ab["p_a_wins"]
+
+
+def test_job_progress_bar_and_stage_list_move_together():
+    """The bar is the weighted sum of finished stages; stages that finish between two polls still show as done."""
+    from api.services import jobs
+    from rallyos.pipeline import Analyzer
+
+    job = {"stages": jobs._fresh_stages(), "taps_given": True, "progress": 0.0, "stage": None}
+    ids = [s for s, _ in Analyzer.STAGES]
+    jobs.apply_progress(job, "calibrate", 0.5, "reading frames")
+    assert job["stages"][0]["state"] == "active" and job["progress"] == pytest.approx(0.005, abs=1e-3)
+    jobs.apply_progress(job, "players", 0.5, "frame 5 of 10")
+    w = Analyzer.STAGE_WEIGHTS
+    assert job["stages"][0]["state"] == "done" and job["progress"] == pytest.approx(w["calibrate"] + 0.5 * w["players"], abs=1e-3)
+    jobs.apply_progress(job, "audio", 1.0, "skipped: no audio track")      # a skipped stage still counts as passed
+    assert job["stages"][2]["state"] == "skipped" and job["stages"][2]["note"] == "no audio track"
+    jobs.apply_progress(job, "outcome", 0.0, "finding landings")           # ball + rallies finished between polls
+    assert [s["state"] for s in job["stages"][3:5]] == ["done", "done"] and job["stages"][5]["state"] == "active"
+    jobs.apply_progress(job, "done", 1.0)
+    assert job["progress"] == 1.0 and all(s["state"] in ("done", "skipped") for s in job["stages"])
+    assert ids[0] == "calibrate" and sum(Analyzer.STAGE_WEIGHTS.values()) == pytest.approx(1.0)
+    assert sum(Analyzer.STAGE_WEIGHTS_AUTO.values()) == pytest.approx(1.0)
+    auto = {"stages": jobs._fresh_stages(), "taps_given": False, "progress": 0.0}
+    jobs.apply_progress(auto, "players", 0.0)                              # finding the court takes real time
+    assert auto["progress"] == pytest.approx(Analyzer.STAGE_WEIGHTS_AUTO["calibrate"], abs=1e-3)

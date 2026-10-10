@@ -111,3 +111,62 @@ def test_ball_only_clip_import(client, tmp_path):
     assert summary["title"] == "RacketVision clip · test" and summary["ball_tracker"] == "racketvision"
     rep = client.get("/v1/matches/rv_test_000/report").json()
     assert rep["insights"] == [] and rep["note"]
+
+
+def test_recalibrate_validates_and_queues(client, monkeypatch):
+    """Calibrating an uploaded match: bad taps are rejected; good taps queue a re-run of the same match id."""
+    from api.config import settings
+    from api.services import jobs
+
+    good = [[330, 948], [1583, 948], [1253, 333], [638, 333]]
+    assert client.post("/v1/matches/rv_test_000/recalibrate", json={"taps": good}).status_code == 404   # no video
+    (settings.media_dir / "rv_test_000").mkdir(parents=True, exist_ok=True)
+    (settings.media_dir / "rv_test_000" / "source.mp4").write_bytes(b"x")
+    crossed = [[330, 948], [1253, 333], [1583, 948], [638, 333]]
+    assert client.post("/v1/matches/rv_test_000/recalibrate", json={"taps": crossed}).status_code == 400
+    seen = {}
+    monkeypatch.setattr(jobs, "submit", lambda video, sport, taps, names, match_id=None: seen.update(
+        video=video, sport=sport, taps=taps, match_id=match_id) or "j_test")
+    r = client.post("/v1/matches/rv_test_000/recalibrate", json={"taps": good})
+    assert r.status_code == 202 and r.json() == {"job_id": "j_test"}
+    assert seen["match_id"] == "rv_test_000" and seen["taps"] == good and seen["video"].is_file()
+
+
+def _court_jpeg() -> bytes:
+    import sys
+    from pathlib import Path
+
+    import cv2
+
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "core" / "tests"))
+    from test_court_fit import camera_g, render                      # noqa: E402  (generated court, known camera)
+    from rallyos.sports import load_sport
+
+    cfg = load_sport("badminton")
+    return cv2.imencode(".jpg", render(cfg, camera_g(cfg)))[1].tobytes()
+
+
+def test_calibrate_finds_the_court_automatically(client):
+    jpg = _court_jpeg()
+    r = client.post("/v1/calibrate", files={"frame": ("f.jpg", jpg, "image/jpeg")}, data={"sport": "badminton"})
+    d = r.json()
+    assert r.status_code == 200 and d["found"] and d["sport"] == "badminton" and d["method"] == "auto"
+    nl, nr, fr, fl = d["corners_px"]
+    assert nl[1] > fl[1] and nl[0] < nr[0]                           # near = bottom, left < right
+    assert d["quality"] in ("high", "check") and d["focal_px"] and d["camera_position_m"][2] > 0.8
+    assert d["width"] == 1280 and d["height"] == 720
+
+
+def test_calibrate_with_taps_blank_frame_and_bad_input(client):
+    import cv2
+    import numpy as np
+
+    blank = cv2.imencode(".jpg", np.full((360, 640, 3), 90, np.uint8))[1].tobytes()
+    r = client.post("/v1/calibrate", files={"frame": ("f.jpg", blank, "image/jpeg")}, data={"sport": "auto"})
+    assert r.status_code == 200 and r.json()["found"] is False and "tap" in r.json()["message"].lower()
+    taps = "[[330,948],[1583,948],[1253,333],[638,333]]"
+    r = client.post("/v1/calibrate", files={"frame": ("f.jpg", blank, "image/jpeg")}, data={"taps": taps})
+    assert r.json()["used_taps"] and r.json()["method"] == "4-tap" and len(r.json()["homography"]) == 3
+    assert client.post("/v1/calibrate", files={"frame": ("f.jpg", blank, "image/jpeg")}, data={"taps": "[[1,1]]"}).status_code == 400
+    assert client.post("/v1/calibrate", files={"frame": ("f.jpg", b"not an image", "image/jpeg")}).status_code == 400
+    assert client.post("/v1/calibrate", files={"frame": ("f.jpg", blank, "image/jpeg")}, data={"sport": "curling"}).status_code == 404

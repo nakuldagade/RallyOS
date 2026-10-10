@@ -1,30 +1,64 @@
 "use client";
 
-// Upload a clip, calibrate with 4 taps, watch the real pipeline's progress over SSE.
+// Upload a clip. The court is found automatically on a preview frame (drag a corner if it is off, or tap by
+// hand); the real pipeline's progress streams back over SSE, one row per stage, on the same clock as the bar.
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { sportLabel } from "@/lib/sports";
-import type { Job, SportConfig } from "@/lib/types";
+import type { CourtDetection, Job, JobStage, SportConfig } from "@/lib/types";
 import { Badge, Card, ConfidenceBar, PageHeader } from "@/components/ui";
 import CourtTapper from "@/components/upload/CourtTapper";
 
-const STAGES = ["calibrate", "players", "ball", "audio", "rallies", "analytics", "render"];
-const STAGE_TEXT: Record<string, string> = {
-  calibrate: "Court calibration (4 taps)",
-  players: "Players + pose (pretrained YOLO11n-pose) and shuttle candidates",
-  ball: "Shuttle trajectory (motion + linking)",
-  audio: "Hit onsets from audio",
-  rallies: "Hits (shuttle path + nearest wrist) and rallies",
-  analytics: "Distance, speed and coverage per player",
-  render: "Match record + tracks for the replay",
+const STAGE_HINT: Record<string, string> = {
+  calibrate: "Court lines + sport template, or your corners",
+  players: "Pretrained YOLO11n-pose on the court area, plus shuttle candidates, in one pass over the video",
+  audio: "Spectral-flux onsets from the soundtrack",
+  ball: "Motion + physics-consistent linking, no trained ball detector",
+  rallies: "Shuttle path + nearest wrist, fused with the sounds",
+  outcome: "Landing, IN/OUT with uncertainty, suggested winner and score",
+  analytics: "Distance, speed, coverage and zones per player",
+  render: "match.json, tracks, review clips, SHA-256",
 };
+
+function StageRow({ st, index }: { st: JobStage; index: number }) {
+  const done = st.state === "done";
+  const active = st.state === "active";
+  const skipped = st.state === "skipped";
+  const failed = st.state === "failed";
+  return (
+    <li className="flex items-start gap-3 text-sm">
+      <span className={`mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full text-xs transition-colors ${
+        done ? "bg-accent text-accent-fg" : active ? "animate-pulse bg-amber-500 text-black" : failed ? "bg-rose-500 text-white"
+          : "bg-fg/10 text-muted"}`}>
+        {done ? "✓" : skipped ? "–" : failed ? "!" : index + 1}
+      </span>
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className={done || active || failed ? "font-medium" : "text-muted"}>{st.label}</span>
+          {skipped && <Badge title={st.note ?? undefined}>skipped</Badge>}
+          {active && st.frac > 0 && <span className="text-xs tabular-nums text-muted">{Math.round(st.frac * 100)}%</span>}
+          {(done || active) && st.seconds != null && <span className="ml-auto text-xs tabular-nums text-muted">{st.seconds.toFixed(1)} s</span>}
+        </div>
+        <div className="text-xs text-muted">
+          {active || skipped || failed ? (st.note ?? STAGE_HINT[st.id]) : STAGE_HINT[st.id]}
+        </div>
+        {active && st.frac > 0 && (
+          <div className="mt-1 h-1 w-full overflow-hidden rounded bg-fg/10">
+            <div className="h-1 rounded bg-amber-500 transition-all" style={{ width: `${Math.round(st.frac * 100)}%` }} />
+          </div>
+        )}
+      </div>
+    </li>
+  );
+}
 
 export default function UploadPage() {
   const [file, setFile] = useState<File | null>(null);
-  const [sport, setSport] = useState("badminton");
+  const [sport, setSport] = useState("auto");           // "auto" = the court template that fits best decides the sport
   const [sports, setSports] = useState<SportConfig[]>([]);
   const [taps, setTaps] = useState<[number, number][] | null>(null);
+  const [detected, setDetected] = useState<CourtDetection | null>(null);
   const [nearName, setNearName] = useState("");
   const [farName, setFarName] = useState("");
   const [job, setJob] = useState<Job | null>(null);
@@ -44,13 +78,15 @@ export default function UploadPage() {
     return () => clearInterval(id);
   }, [busy]);
 
+  const effectiveSport = sport === "auto" ? (detected?.sport ?? "auto") : sport;
+
   const start = async () => {
     if (!file) return;
     setBusy(true);
     setError(null);
     setJob(null);
     try {
-      const { job_id } = await api.upload(file, sport, { taps, nearName, farName });
+      const { job_id } = await api.upload(file, effectiveSport, { taps, nearName, farName });
       esRef.current?.close();
       const es = new EventSource(api.jobStreamUrl(job_id));
       esRef.current = es;
@@ -72,26 +108,29 @@ export default function UploadPage() {
     }
   };
 
-  const stageIdx = job?.stage ? STAGES.indexOf(job.stage) : -1;
   const elapsed = job?.started ? Math.max(0, Math.round(now / 1000 - job.started)) : 0;
 
   return (
     <div className="mx-auto max-w-4xl">
-      <PageHeader title="Analyse a match" subtitle="Upload a phone video, tap the 4 court corners, and RallyOS processes it on this machine." />
+      <PageHeader title="Analyse a match" subtitle="Upload a phone video. RallyOS finds the court and the sport itself, then processes the clip on this machine." />
       <Card>
         <div className="space-y-4">
           <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-border p-6 text-center hover:border-accent">
             <span className="text-3xl">🎥</span>
             <span className="text-sm font-medium">{file ? file.name : "Choose a video (MP4 / H.264 plays best in the browser)"}</span>
             <span className="text-xs text-muted">{file ? `${(file.size / 1e6).toFixed(1)} MB` : "Fixed camera behind the baseline, 2–3 m high, all 4 corners visible. Short clips (10–60 s) process fastest on CPU."}</span>
-            <input type="file" accept="video/*" className="hidden" onChange={(e) => { setFile(e.target.files?.[0] ?? null); setJob(null); }} />
+            <input type="file" accept="video/*" className="hidden"
+              onChange={(e) => { setFile(e.target.files?.[0] ?? null); setJob(null); setTaps(null); setDetected(null); e.target.value = ""; }} />
           </label>
 
           {file && (
             <div>
               <div className="label mb-2">Court calibration</div>
-              <CourtTapper file={file} onChange={setTaps} />
-              <p className="mt-1 text-xs text-muted">Optional but recommended: it gives court positions (top-down view, distance, heatmap) and filters out umpires and spectators. Automatic court detection isn&apos;t built yet.</p>
+              <CourtTapper file={file} sport={sport} onChange={setTaps} onDetected={setDetected} />
+              <p className="mt-1 text-xs text-muted">
+                Court positions (top-down view, distance, heatmap, line calls, score) need the court, and players are only looked for on and around it, so umpires and spectators are ignored.
+                {" "}If no corners are set here, the court is searched for automatically while analysing.
+              </p>
             </div>
           )}
 
@@ -99,10 +138,12 @@ export default function UploadPage() {
             <div>
               <div className="label mb-1">Sport</div>
               <select className="input w-full" value={sport} onChange={(e) => setSport(e.target.value)}>
-                {(sports.length ? sports : [{ sport: "badminton" } as SportConfig]).map((s) => (
+                <option value="auto">Auto-detect sport</option>
+                {sports.map((s) => (
                   <option key={s.sport} value={s.sport}>{s.display_name ?? sportLabel(s.sport)}</option>
                 ))}
               </select>
+              {sport === "auto" && detected?.sport && <div className="mt-1 text-xs text-muted">Detected: {sportLabel(detected.sport)}</div>}
             </div>
             <div>
               <div className="label mb-1">Near player (closest to camera)</div>
@@ -115,7 +156,8 @@ export default function UploadPage() {
           </div>
           <div className="flex flex-wrap items-center gap-3">
             <button className="btn-primary" disabled={!file || busy} onClick={start}>{busy ? "Processing…" : "Upload & analyse"}</button>
-            {file && !taps && <span className="text-xs text-amber-600 dark:text-amber-400">No calibration: players and shuttle are still tracked, but in video pixels only.</span>}
+            {file && taps && <span className="text-xs text-emerald-600 dark:text-emerald-400">✓ Using these 4 corners: players and shuttle are searched on the court only</span>}
+            {file && !taps && <span className="text-xs text-amber-600 dark:text-amber-400">No corners set: the court will be searched for automatically (applied only if the fit is clearly good).</span>}
           </div>
           {error && <div className="text-sm text-rose-500">{error}</div>}
         </div>
@@ -127,24 +169,11 @@ export default function UploadPage() {
             Job {job.job_id}
             {job.simulated && <Badge tone="amber">simulated pipeline</Badge>}
             {job.status === "running" && <span className="text-xs font-normal text-muted">{elapsed} s elapsed</span>}
+            <span className="ml-auto text-sm font-normal tabular-nums">{Math.round(job.progress * 100)}%</span>
           </span>}>
           <ConfidenceBar value={job.progress} tone={job.status === "failed" ? "red" : "accent"} />
-          <ol className="mt-4 space-y-2">
-            {STAGES.map((s, i) => {
-              const skipped = job.skipped?.includes(s) || (s === "calibrate" && job.calibrated === false);
-              const done = !skipped && (job.status === "done" || i < stageIdx);
-              const active = !skipped && i === stageIdx && job.status === "running";
-              return (
-                <li key={s} className="flex items-center gap-3 text-sm">
-                  <span className={`grid h-6 w-6 place-items-center rounded-full text-xs ${done ? "bg-accent text-accent-fg" : active ? "animate-pulse bg-amber-500 text-black" : "bg-fg/10 text-muted"}`}>
-                    {done ? "✓" : skipped ? "–" : i + 1}
-                  </span>
-                  <span className={done || active ? "" : "text-muted"}>{STAGE_TEXT[s]}</span>
-                  {skipped && <Badge>{s === "calibrate" ? "no taps" : "not built yet"}</Badge>}
-                  {active && s === "players" && <span className="text-xs text-muted">{Math.round(((job.progress - 0.05) / 0.8) * 100)}%</span>}
-                </li>
-              );
-            })}
+          <ol className="mt-4 space-y-3">
+            {(job.stages ?? []).map((st, i) => <StageRow key={st.id} st={st} index={i} />)}
           </ol>
           {job.status === "done" && job.match_id && (
             <div className="mt-4 flex flex-wrap items-center gap-3">

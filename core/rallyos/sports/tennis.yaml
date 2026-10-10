@@ -31,6 +31,7 @@ projectile:
   size_m: 0.067
   motion_model: ballistic_drag
   drag_coefficient: 0.55
+  max_height_m: 12             # highest a shot goes (shuttle search area above the court)
   bounces: true
   speed_range_kmh: [10, 260]
   color_prior: [yellow, green]

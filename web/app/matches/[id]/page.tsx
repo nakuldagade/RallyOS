@@ -6,11 +6,13 @@ import { useParams, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
 import { fmtTime, pct, shortHash, speed } from "@/lib/format";
-import { BADMINTON, heatmap, sportLabel } from "@/lib/sports";
+import { BADMINTON, heatmap, sportLabel, zoneRect, zoneTime } from "@/lib/sports";
 import type { Score, SportConfig, TrackFrame } from "@/lib/types";
 import { useApi } from "@/lib/useApi";
 import { Badge, Card, ErrorBox, Loading, MockBanner } from "@/components/ui";
-import MiniCourt, { type CourtDot } from "@/components/court/MiniCourt";
+import MiniCourt, { type CourtDot, type CourtRect } from "@/components/court/MiniCourt";
+import ZoneSummary, { type PlayerZones } from "@/components/court/ZoneSummary";
+import CalibratePanel from "@/components/match/CalibratePanel";
 import VideoOverlay from "@/components/video/VideoOverlay";
 import RallyTimeline from "@/components/match/RallyTimeline";
 import RallyOutcomes from "@/components/match/RallyOutcomes";
@@ -33,7 +35,7 @@ function MatchVision() {
   const [frame, setFrame] = useState<TrackFrame | null>(null);
   const [seek, setSeek] = useState<{ t: number; n: number }>();
   const [tab, setTab] = useState<Tab>("stats");
-  const [heatFor, setHeatFor] = useState<number | null>(null);
+  const [heatMode, setHeatMode] = useState<string>("");   // "" | "live:<track>" | "full:<track>"
 
   const m = match.data?.data;
   const tr = tracks.data?.data ?? null;
@@ -48,7 +50,25 @@ function MatchVision() {
     if (!isNaN(t)) setSeek({ t, n: Date.now() });
   }, [params]);
 
-  const heat = useMemo(() => (tr && heatFor !== null ? heatmap(tr, heatFor, sport) : null), [tr, heatFor, sport]);
+  const fps = m?.video.fps || tr?.fps || 25;
+  const upto = Math.floor(time * fps);
+  const [heatKind, heatTid] = heatMode ? [heatMode.split(":")[0], parseInt(heatMode.split(":")[1])] : ["", null];
+  const heat = useMemo(
+    () => (tr && heatTid !== null ? heatmap(tr, heatTid, sport, 0.5, heatKind === "live" ? upto : undefined) : null),
+    [tr, heatTid, heatKind, sport, heatKind === "live" ? upto : 0], // eslint-disable-line react-hooks/exhaustive-deps
+  );
+  const zoneRows: PlayerZones[] = useMemo(() => {
+    if (!tr || !m) return [];
+    return m.players.filter((p) => p.side === "near" || p.side === "far").map((p) => ({
+      player: p,
+      live: zoneTime(tr, p.track_id, p.side as "near" | "far", sport, upto),
+      whole: zoneTime(tr, p.track_id, p.side as "near" | "far", sport),
+    }));
+  }, [tr, m, sport, upto]);
+  const zoneBoxes: CourtRect[] = zoneRows.flatMap(({ player, live }) => {
+    const r = live[0] ? zoneRect(live[0].zone, sport, player.side as "near" | "far") : null;
+    return r ? [{ ...r, color: player.color ?? "#94a3b8", label: `${Math.round(live[0].pct * 100)}%` }] : [];
+  });
 
   if (match.loading) return <Loading label="Loading match…" />;
   if (match.error || !m) return <ErrorBox message={match.error ?? "Match not found"} onRetry={match.reload} />;
@@ -123,16 +143,23 @@ function MatchVision() {
           )}
           {calibrated ? (
           <Card title="Top-down view" actions={
-            <select className="input py-1 text-xs" value={heatFor ?? ""} onChange={(e) => setHeatFor(e.target.value ? parseInt(e.target.value) : null)}>
+            <select className="input py-1 text-xs" value={heatMode} onChange={(e) => setHeatMode(e.target.value)}>
               <option value="">Live positions</option>
-              {m.players.map((p) => <option key={p.track_id} value={p.track_id}>Heatmap: {p.name}</option>)}
+              {m.players.map((p) => <option key={`l${p.track_id}`} value={`live:${p.track_id}`}>Live heatmap: {p.name}</option>)}
+              {m.players.map((p) => <option key={`f${p.track_id}`} value={`full:${p.track_id}`}>Whole-clip heatmap: {p.name}</option>)}
             </select>}>
-            <MiniCourt sport={sport} dots={dots} heat={heat} className="mx-auto h-[360px] w-full" />
-            <p className="mt-2 text-xs text-muted">Hollow yellow rings are landings (click to jump). {heat ? "Heatmap from tracked foot positions." : ""}</p>
+            <MiniCourt sport={sport} dots={dots} heat={heat} rects={zoneBoxes} className="mx-auto h-[360px] w-full" />
+            <p className="mt-2 text-xs text-muted">
+              Hollow yellow rings are landings (click to jump).
+              {heat ? (heatKind === "live" ? ` Heatmap builds up as the video plays (to ${fmtTime(time)}).` : " Heatmap of the whole clip from tracked foot positions.") : ""}
+            </p>
+            <ZoneSummary rows={zoneRows} timeLabel={`up to ${fmtTime(time)}`} />
+            {!match.data?.mock && <div className="mt-3 flex justify-end"><CalibratePanel match={m} onDone={() => { match.reload(); tracks.reload(); }} /></div>}
           </Card>
           ) : (
             <Card title="Top-down view">
-              <p className="text-sm text-muted">Court not calibrated for this clip, so there are no court positions to draw. Court Fingerprint or 4 taps will add it.</p>
+              <p className="mb-3 text-sm text-muted">Court not calibrated for this clip, so there are no court positions, heatmaps, line calls or score. Tap the 4 court corners to add them.</p>
+              {!match.data?.mock && <CalibratePanel match={m} onDone={() => { match.reload(); tracks.reload(); }} />}
             </Card>
           )}
           {m.disputes.length > 0 && (

@@ -12,6 +12,15 @@ export interface CourtDot {
   title?: string;
 }
 
+export interface CourtRect {
+  x0: number;
+  x1: number;
+  y0: number;
+  y1: number;
+  color: string;
+  label?: string;
+}
+
 export interface CourtEllipse {
   x: number;
   y: number;
@@ -26,12 +35,13 @@ interface Props {
   dots?: CourtDot[];
   ellipse?: CourtEllipse | null;
   heat?: HeatGrid | null;
+  rects?: CourtRect[];
   focus?: { x: number; y: number; r: number } | null;
   highlightLines?: string[];
   className?: string;
 }
 
-export default function MiniCourt({ sport, dots = [], ellipse, heat, focus, highlightLines = [], className = "" }: Props) {
+export default function MiniCourt({ sport, dots = [], ellipse, heat, rects = [], focus, highlightLines = [], className = "" }: Props) {
   const { length: L, width: W, lines } = sport.court;
   const span = focus ? focus.r * 2 : Math.max(L, W);
   const pad = Math.max(L, W) * 0.06;
@@ -62,6 +72,18 @@ export default function MiniCourt({ sport, dots = [], ellipse, heat, focus, high
             strokeDasharray={isNet ? "5 3" : undefined} vectorEffect="non-scaling-stroke" opacity={0.92} />
         );
       })}
+      {rects.map((z, i) => (
+        <g key={`z${i}`}>
+          <rect x={z.x0} y={sy(z.y1)} width={z.x1 - z.x0} height={z.y1 - z.y0} fill={z.color} fillOpacity={0.1}
+            stroke={z.color} strokeWidth={2} strokeDasharray="4 2" vectorEffect="non-scaling-stroke" />
+          {z.label && (
+            <text x={(z.x0 + z.x1) / 2} y={sy((z.y0 + z.y1) / 2)} fontSize={Math.max(L, W) * 0.03} textAnchor="middle"
+              dominantBaseline="middle" fill="white" style={{ paintOrder: "stroke", stroke: "rgba(0,0,0,0.65)", strokeWidth: Math.max(L, W) * 0.006 }}>
+              {z.label}
+            </text>
+          )}
+        </g>
+      ))}
       {ellipse && (
         <g>
           <ellipse cx={ellipse.x} cy={sy(ellipse.y)} rx={ellipse.a} ry={ellipse.b}

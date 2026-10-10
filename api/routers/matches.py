@@ -1,12 +1,15 @@
 """GET /v1/matches, /v1/matches/{id}, /rallies, /events, /tracks, POST /score/confirm."""
+import shutil
+import time
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, select
 
 from api.config import settings
 from api.db import get_session
 from api.models import Match
-from api.schemas import MatchJSON, MatchSummary, ScoreConfirm
-from api.services import rating, store
+from api.schemas import MatchJSON, MatchSummary, Recalibrate, ScoreConfirm
+from api.services import jobs, rating, store
 
 router = APIRouter(tags=["matches"])
 
@@ -79,3 +82,30 @@ def confirm_score(match_id: str, body: ScoreConfirm, session: Session = Depends(
         session.commit()
         changes = rating.apply_match(session, row)
     return {**data["score"], "rating_update": changes}
+
+
+@router.post("/matches/{match_id}/recalibrate", status_code=202)
+def recalibrate(match_id: str, body: Recalibrate, session: Session = Depends(get_session)):
+    """Calibrate an already-uploaded match with 4 taps and re-run the pipeline on its video in place.
+    Returns a job id (progress at GET /v1/jobs/{id}). A human-confirmed score is kept as a .bak file."""
+    from rallyos.calibration.template_fit import homography_from_taps
+    from rallyos.sports import load_sport
+
+    data = _load(match_id, session)
+    src = settings.media_dir / match_id / "source.mp4"
+    if not src.is_file():
+        raise HTTPException(404, "this match has no stored source video to re-process")
+    sport = body.sport or data["sport"]
+    try:
+        homography_from_taps(body.taps, load_sport(sport))
+    except (ValueError, KeyError) as exc:
+        raise HTTPException(400, str(exc)) from None
+    up = settings.media_dir / "uploads"
+    up.mkdir(parents=True, exist_ok=True)
+    video = up / f"{match_id}_recal_{int(time.time())}.mp4"
+    shutil.copyfile(src, video)                     # the run rewrites media/<id>/source.mp4
+    override = settings.runtime_dir / f"{match_id}.json"
+    if override.exists():
+        override.rename(override.with_suffix(f".json.bak-{int(time.time())}"))
+    names = {p["track_id"]: p["name"] for p in data.get("players", []) if p.get("name")}
+    return {"job_id": jobs.submit(video, sport, body.taps, names, match_id=match_id)}

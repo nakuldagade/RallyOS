@@ -105,6 +105,11 @@ class MatchSummary(BaseModel):
     ball_tracker: Optional[str] = None              # e.g. "racketvision" when the shuttle came from the plug-in
 
 
+class Recalibrate(BaseModel):
+    taps: list[list[float]]           # 4 outer court corners in video px: near-left, near-right, far-right, far-left
+    sport: Optional[str] = None       # default: the match's sport
+
+
 class ScoreConfirm(BaseModel):
     games: list[list[int]]
     winner_track_id: Optional[int] = None
