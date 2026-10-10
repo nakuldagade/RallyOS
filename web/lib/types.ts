@@ -58,7 +58,11 @@ export interface MatchEvent {
   shot_unchecked?: string[];          // rule conditions that could not be measured (e.g. descent_deg_min)
   speed_kmh?: number | null;
   speed_err_pct?: number | null;
-  speed_basis?: string;      // "hit-to-hit" | "hit-to-landing": which two points the average was taken between
+  shot_rating?: { outcome: string; technique: number | null; score: number; parts: Record<string, number>; confidence: number; why: string };
+  speed_basis?: string;      // "hit-to-hit" | "hit-to-landing": which two points the flight was measured between
+  speed_kind?: "launch" | "average";   // launch = speed at the racket from distance, time and air drag (shuttle); average = horizontal average over the flight
+  avg_speed_kmh?: number | null;       // the plain distance / time, kept for reference
+  launch_angle_deg?: number | null;
   speed_why_not?: string;    // why no speed was given
   confidence: number;
   source?: string[];
@@ -112,6 +116,10 @@ export interface PlayerStats {
   split_step_detected?: number;
   split_step_clip_t?: number[];
   fastest_shot_kmh?: number;
+  fastest_shot_err_pct?: number;     // 1-sigma band of the fastest shot (launch speed); absent in older match files (then an average)
+  fastest_shot_t?: number;
+  best_shot?: BestShot;              // outcome first (won the point > forced an error > kept the rally going > not seen > lost the point), technique inside it
+  best_shots?: BestShot[];
   avg_shot_kmh?: number;
   fatigue?: {
     enough_data: boolean; n_shots: number; note?: string;
@@ -178,6 +186,17 @@ export interface LiveBlock {
   avg_process_s?: number;
   finalise_s?: number;
   cdn?: { provider: string; uploaded: boolean; error?: string };
+}
+
+export interface BestShot {
+  t: number;
+  shot: string | null;
+  outcome: "winner" | "forced_error" | "kept_going" | "unknown" | "error";
+  score: number;                     // 0-100: the outcome sets the band (winner 80-100 ... lost 0-20), the technique places the shot inside it
+  technique: number | null;          // 0-1, null when too little was measured
+  confidence: number;
+  why: string;
+  basis?: string;                    // "outcome" or "technique only: ..."
 }
 
 export interface MatchJSON {

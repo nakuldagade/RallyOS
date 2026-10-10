@@ -360,7 +360,7 @@ def resolve_outcome(scene: Scene, rallies: list[dict], hits: list[dict], balls: 
                          "call": e["call"], "prob": e["call_prob"], "status": "open"})
     for e in landings:
         e.pop("frame", None)
-    speed_summary = annotate_speeds(events, fps, cfg) if H is not None else None
+    speed_summary = annotate_speeds(events, fps, cfg, frames) if H is not None else None
     shot_summary = classify_shots(events, frames, fps, cfg) if H is not None else None
     score = score_rallies(cfg, rallies, {1: 0, 2: 1}) if H is not None else \
         {"games": [], "winner_track_id": None, "confirmed_by_human": False, "source": None,
@@ -451,6 +451,9 @@ def movement_analytics(scene: Scene, frames: list[dict], events: list[dict], ral
         per_player[str(tid)] = stats
     players_meta = [{"track_id": tid, "player_id": None, "name": names[tid], "side": side, "color": PLAYER_COLORS[tid]}
                     for tid, side in ((1, "near"), (2, "far")) if per_player[str(tid)]["tracked_pct"] > 0]
+    from rallyos.analytics.bestshot import rate_shots
+
+    rate_shots(events, rallies, frames, fps, cfg, per_player)      # best shot per player: outcome first, technique inside it
     return per_player, players_meta, split_note
 
 

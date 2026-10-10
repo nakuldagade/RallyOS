@@ -163,9 +163,21 @@ def template_insights(data: dict) -> list[dict]:
                 ["most_zone", "most_zone_pct"], fallback)
         if st.get("fastest_shot_kmh") is not None:
             fast = next((e["t"] for e in data["events"] if e.get("track_id") == t and e.get("speed_kmh") == st["fastest_shot_kmh"]), None)
-            add(f"{who}'s fastest shot averaged about {st['fastest_shot_kmh']} km/h from contact to the next contact or landing "
-                "(an average horizontal speed, so the shuttle's peak speed is higher).",
-                ["fastest_shot_kmh"], [fast] if fast is not None else None)
+            err = st.get("fastest_shot_err_pct")
+            if err is not None:
+                add(f"{who}'s fastest shot left the racket at about {st['fastest_shot_kmh']} km/h (plus or minus {err}%), worked out from the distance, "
+                    "the flight time and air drag.", ["fastest_shot_kmh", "fastest_shot_err_pct"], [fast] if fast is not None else None)
+            else:
+                add(f"{who}'s fastest shot averaged about {st['fastest_shot_kmh']} km/h from contact to the next contact or landing "
+                    "(an average horizontal speed, so the shuttle's peak speed is higher).",
+                    ["fastest_shot_kmh"], [fast] if fast is not None else None)
+        bs = st.get("best_shot")
+        if bs:
+            what = {"winner": "won the point", "forced_error": "forced an error", "kept_going": "kept the rally going",
+                    "unknown": "was in a rally whose end was not seen", "error": "lost the point"}[bs["outcome"]]
+            add(f"{who}'s best shot was the {bs.get('shot') or 'shot'} at {bs['t']:.1f} s ({bs['score']:.0f} out of 100): it {what}"
+                + ("; the clip showed no point-ending shot of theirs, so shots were ranked by technique alone." if bs.get("basis", "outcome") != "outcome" else "."),
+                ["best_shot.score", "best_shot.outcome"], [bs["t"]])
         mix = st.get("shot_mix") or {}
         if mix:
             top = max(mix, key=mix.get)

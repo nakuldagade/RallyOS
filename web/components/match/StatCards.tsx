@@ -1,4 +1,4 @@
-import { num, pct } from "@/lib/format";
+import { fmtTime, num, pct } from "@/lib/format";
 import type { MatchJSON, PlayerStats } from "@/lib/types";
 import { Stat } from "@/components/ui";
 
@@ -25,7 +25,17 @@ function playerMetrics(s: PlayerStats): Metric[] {
   } else if (s.fatigue) {
     out.push({ label: "Fatigue trend", value: "not enough play", hint: s.fatigue.note ?? "needs more shots" });
   }
-  if (s.fastest_shot_kmh) out.push({ label: "Fastest shot", value: `≈ ${s.fastest_shot_kmh} km/h`, hint: "average horizontal speed: a lower bound" });
+  if (s.fastest_shot_kmh) {
+    const launch = s.fastest_shot_err_pct != null;      // newer matches: speed at the racket with a band; older ones stored an average
+    out.push({ label: "Fastest shot", value: `≈ ${s.fastest_shot_kmh} km/h${launch ? ` ± ${s.fastest_shot_err_pct}%` : ""}`,
+      hint: launch ? "speed at the racket, from distance, flight time and air drag (±1 standard deviation)" : "average horizontal speed: a lower bound (older analysis)" });
+  }
+  if (s.best_shot) {
+    const b = s.best_shot;
+    const what: Record<string, string> = { winner: "won the point", forced_error: "forced an error", kept_going: "kept the rally going", unknown: "outcome not seen", error: "lost the point" };
+    out.push({ label: "Best shot", value: `${b.shot ?? "shot"} at ${fmtTime(b.t)}`,
+      hint: `${b.score}/100 · ${what[b.outcome] ?? b.outcome}${b.basis && b.basis !== "outcome" ? " · no point-ending shot seen: ranked by technique" : ""}. ${b.why}` });
+  }
   if (s.avg_smash_kmh) out.push({ label: "Avg smash", value: `≈ ${s.avg_smash_kmh} km/h`, hint: "event-timing estimate" });
   if (typeof s.hits === "number") out.push({ label: "Hits", value: String(s.hits), hint: "vision-only candidates" });
   if (typeof s.tracked_pct === "number") out.push({ label: "Tracked", value: pct(s.tracked_pct), hint: "of sampled frames" });
