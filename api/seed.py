@@ -1,6 +1,5 @@
 """CLI:  python -m api.seed   -> writes data/seed/*.json if missing, loads them, imports the mock match."""
 import json
-import secrets
 from datetime import datetime, timedelta, timezone
 
 from sqlmodel import Session, select
@@ -27,70 +26,37 @@ TOURNAMENTS = [{"name": "Mumbai District Open", "sport": "badminton", "start_dat
                {"name": "Thane Inter-Academy Cup", "sport": "badminton", "start_date": "2026-12-06"}]
 
 
+DEMO_PASSWORD = "rallyos-demo"          # demo accounts only: change it, or register your own, before showing real data
 COACHES = [{"email": "coach.vikram@rallyos.demo", "name": "Coach Vikram", "roster": ["p_anika", "p_rohan", "p_kabir"]},
            {"email": "coach.neha@rallyos.demo", "name": "Coach Neha", "roster": ["p_meera", "p_isha"]}]
 
 
-def _new_password() -> str:
-    return secrets.token_urlsafe(9)                        # 12 random characters: there is no fixed demo password
-
-
-def _save_passwords(passwords: dict[str, str]) -> None:
-    """The passwords are shown once and kept only in the git-ignored runtime folder, so a person can read them from there."""
-    path = settings.runtime_dir / "demo_accounts.txt"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    known: dict[str, str] = {}
-    if path.exists():
-        for line in path.read_text(encoding="utf-8").splitlines():
-            if "\t" in line:
-                e, pw = line.split("\t", 1)
-                known[e] = pw
-    known.update(passwords)
-    path.write_text("".join(f"{e}\t{pw}\n" for e, pw in sorted(known.items())), encoding="utf-8")
-
-
-def seed_accounts(s: Session, reset: bool = False) -> dict[str, str]:
-    """A login for every seed player (first-name@rallyos.demo) and two coaches with different rosters, each with its own random
-    password. Returns {email: password} for the accounts created (or, with reset=True, for every demo account: new passwords)."""
-    out: dict[str, str] = {}
-
-    def credential(user: User) -> None:
-        pw = _new_password()
-        row = s.get(Credential, user.id)
-        if row is None:
-            s.add(Credential(user_id=user.id, password_hash=auth.hash_password(pw)))
-        else:
-            row.password_hash = auth.hash_password(pw)
-            s.add(row)
-        out[user.email] = pw
-
+def seed_accounts(s: Session) -> list[str]:
+    """A login for every seed player (first-name@rallyos.demo) and two coaches with different rosters. Idempotent."""
+    made = []
     for p in s.exec(select(Player)).all():
         email = f"{p.name.lower()}@rallyos.demo"
-        u = s.exec(select(User).where(User.email == email)).first()
-        if u is None:
-            u = User(email=email, name=p.name, role="player")
-            s.add(u)
-            s.flush()
-            p.user_id = u.id
-            s.add(p)
-        elif not reset:
+        if s.exec(select(User).where(User.email == email)).first():
             continue
-        credential(u)
+        u = User(email=email, name=p.name, role="player")
+        s.add(u)
+        s.flush()
+        s.add(Credential(user_id=u.id, password_hash=auth.hash_password(DEMO_PASSWORD)))
+        p.user_id = u.id
+        s.add(p)
+        made.append(email)
     for c in COACHES:
-        u = s.exec(select(User).where(User.email == c["email"])).first()
-        if u is None:
-            u = User(email=c["email"], name=c["name"], role="coach")
-            s.add(u)
-            s.flush()
-            for pid in c["roster"]:
-                s.add(CoachPlayer(coach_user_id=u.id, player_id=pid))
-        elif not reset:
+        if s.exec(select(User).where(User.email == c["email"])).first():
             continue
-        credential(u)
+        u = User(email=c["email"], name=c["name"], role="coach")
+        s.add(u)
+        s.flush()
+        s.add(Credential(user_id=u.id, password_hash=auth.hash_password(DEMO_PASSWORD)))
+        for pid in c["roster"]:
+            s.add(CoachPlayer(coach_user_id=u.id, player_id=pid))
+        made.append(c["email"])
     s.commit()
-    if out:
-        _save_passwords(out)
-    return out
+    return made
 
 
 def _file(name: str, default: list) -> list:
@@ -100,7 +66,7 @@ def _file(name: str, default: list) -> list:
     return json.loads(p.read_text(encoding="utf-8"))
 
 
-def main(reset_passwords: bool = False) -> None:
+def main() -> None:
     create_all()
     players, venues, tours = _file("players.json", PLAYERS), _file("venues.json", VENUES), _file("tournaments.json", TOURNAMENTS)
     now = datetime.now(timezone.utc).replace(tzinfo=None)
@@ -121,19 +87,13 @@ def main(reset_passwords: bool = False) -> None:
             for t in tours:
                 s.add(Tournament(**t))
         s.commit()
-        made = seed_accounts(s, reset=reset_passwords)
+        made = seed_accounts(s)
         if made:
-            print("demo accounts (random passwords, also saved in data/runtime/demo_accounts.txt):")
-            for e, pw in made.items():
-                print(f"  {e}  {pw}")
+            print(f"demo accounts (password {DEMO_PASSWORD!r}):", ", ".join(made))
         if settings.mock_dir.joinpath("match.json").exists():
             print("imported mock match", import_folder(settings.mock_dir, s))
     print("seed done")
 
 
 if __name__ == "__main__":
-    import argparse
-
-    ap = argparse.ArgumentParser(description="Seed the database; creates demo accounts with random passwords.")
-    ap.add_argument("--reset-passwords", action="store_true", help="give every demo account a new random password")
-    main(reset_passwords=ap.parse_args().reset_passwords)
+    main()
