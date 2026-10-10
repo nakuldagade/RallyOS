@@ -1,0 +1,56 @@
+sport: badminton
+display_name: Badminton
+court:
+  units: m
+  length: 13.40
+  width: 6.10                # doubles
+  # Court coordinates: origin = near-left corner, x across (width), y along (length).
+  lines:
+    - {id: baseline_near,      p1: [0, 0],      p2: [6.10, 0]}
+    - {id: long_service_dbl_n, p1: [0, 0.76],   p2: [6.10, 0.76]}
+    - {id: short_service_n,    p1: [0, 4.72],   p2: [6.10, 4.72]}
+    - {id: net,                p1: [0, 6.70],   p2: [6.10, 6.70]}
+    - {id: short_service_f,    p1: [0, 8.68],   p2: [6.10, 8.68]}
+    - {id: long_service_dbl_f, p1: [0, 12.64],  p2: [6.10, 12.64]}
+    - {id: baseline_far,       p1: [0, 13.40],  p2: [6.10, 13.40]}
+    - {id: sideline_dbl_left,  p1: [0, 0],      p2: [0, 13.40]}
+    - {id: sideline_dbl_right, p1: [6.10, 0],   p2: [6.10, 13.40]}
+    - {id: singles_left,       p1: [0.46, 0],   p2: [0.46, 13.40]}
+    - {id: singles_right,      p1: [5.64, 0],   p2: [5.64, 13.40]}
+    - {id: centre_near,        p1: [3.05, 0],   p2: [3.05, 4.72]}
+    - {id: centre_far,         p1: [3.05, 8.68], p2: [3.05, 13.40]}
+  # Distinguishing inner lines vs pickleball (same outline): doubles long-service line + singles sidelines.
+  fingerprint_lines: [long_service_dbl_n, long_service_dbl_f, singles_left, singles_right]
+  zones:
+    front: {y_from_net_m: [0, 1.98]}
+    mid:   {y_from_net_m: [1.98, 4.20]}
+    rear:  {y_from_net_m: [4.20, 6.70]}
+  base_position: [3.05, 3.4]   # near side; mirrored for far side. Used for return-to-base.
+net: {height_center: 1.524, height_post: 1.55}
+walls: []
+projectile:
+  kind: shuttle
+  size_m: 0.065
+  motion_model: quadratic_drag
+  terminal_velocity_mps: 6.7
+  bounces: false
+  speed_range_kmh: [10, 420]
+  color_prior: [white, yellow]
+events: [serve, hit, landing, net_touch, fault]
+scoring:
+  type: rally_point
+  points_to_win: 21
+  win_by: 2
+  cap: 30
+  games_to_win: 2
+  serve_rule: winner_serves
+  next_game_server: winner
+  serve_court_by_parity: true    # server's score even -> right service court
+shots:   # explainable rule thresholds
+  smash: {wrist_above_head: true, max_flight_s: 0.6, descent_deg_min: 25}
+  clear: {land_zone: rear, apex_over_net_m_min: 3.0}
+  drop:  {from_zone: [rear, mid], land_zone: front, min_flight_s: 0.8}
+  net:   {from_zone: front, land_zone: front}
+  lift:  {from_zone: front, land_zone: rear}
+  drive: {apex_over_net_m_max: 0.6, max_flight_s: 0.7}
+capture: {min_fps: 60, recommended_fps: 120, camera: "behind baseline, 2-3 m high, centred"}

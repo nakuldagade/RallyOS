@@ -1,0 +1,59 @@
+sport: padel
+display_name: Padel
+court:
+  units: m
+  length: 20.0
+  width: 10.0
+  lines:
+    - {id: baseline_near,  p1: [0, 0],     p2: [10, 0]}
+    - {id: service_near,   p1: [0, 3.05],  p2: [10, 3.05]}    # 6.95 m from the net
+    - {id: net,            p1: [0, 10],    p2: [10, 10]}
+    - {id: service_far,    p1: [0, 16.95], p2: [10, 16.95]}
+    - {id: baseline_far,   p1: [0, 20],    p2: [10, 20]}
+    - {id: sideline_left,  p1: [0, 0],     p2: [0, 20]}
+    - {id: sideline_right, p1: [10, 0],    p2: [10, 20]}
+    - {id: centre_service, p1: [5, 3.05],  p2: [5, 16.95]}
+  fingerprint_lines: [service_near, service_far, centre_service]
+  zones:
+    net:  {y_from_net_m: [0, 4.0]}
+    mid:  {y_from_net_m: [4.0, 6.95]}
+    back: {y_from_net_m: [6.95, 10.0]}
+  base_position: [5, 2.0]
+net: {height_center: 0.88, height_post: 0.92}
+# Glass walls become extra planes in the template; rebounds are legal.
+walls:
+  - {id: back_near,  plane: "y=0",  height_m: 3.0, material: glass}
+  - {id: back_far,   plane: "y=20", height_m: 3.0, material: glass}
+  - {id: side_left_near,  plane: "x=0",  y_range: [0, 4],   height_m: 3.0, material: glass}
+  - {id: side_left_far,   plane: "x=0",  y_range: [16, 20], height_m: 3.0, material: glass}
+  - {id: side_right_near, plane: "x=10", y_range: [0, 4],   height_m: 3.0, material: glass}
+  - {id: side_right_far,  plane: "x=10", y_range: [16, 20], height_m: 3.0, material: glass}
+projectile:
+  kind: ball
+  size_m: 0.065
+  motion_model: ballistic_drag
+  drag_coefficient: 0.55
+  bounces: true
+  wall_rebounds: true
+  speed_range_kmh: [10, 180]
+  color_prior: [yellow, green]
+events: [serve, hit, bounce, wall_rebound, net_touch, fault]
+scoring:
+  type: game_set
+  deuce: advantage
+  games_per_set: 6
+  tiebreak_at: 6
+  tiebreak_points: 7
+  sets_to_win: 2
+  final_set: {type: tiebreak, points: 7}
+  serve_rule: alternate_games
+  variants:
+    golden_point: {deuce: golden_point}   # at 40-40 the next point wins the game
+shots:
+  serve: {first_hit_of_rally: true, underarm: true}
+  bandeja: {wrist_above_head: true, apex_over_net_m_max: 1.5}
+  smash: {wrist_above_head: true, descent_deg_min: 20}
+  lob: {apex_m_min: 4.0}
+  volley: {no_bounce_before_hit: true, from_zone: net}
+  wall_return: {wall_rebound_before_hit: true}
+capture: {min_fps: 60, recommended_fps: 120, camera: "behind back glass, 3-4 m high, centred"}

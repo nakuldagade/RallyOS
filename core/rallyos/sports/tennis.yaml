@@ -1,0 +1,54 @@
+sport: tennis
+display_name: Tennis
+court:
+  units: m
+  length: 23.77
+  width: 10.97               # doubles
+  lines:
+    - {id: baseline_near,       p1: [0, 0],        p2: [10.97, 0]}
+    - {id: service_near,        p1: [1.37, 5.485], p2: [9.60, 5.485]}
+    - {id: net,                 p1: [0, 11.885],   p2: [10.97, 11.885]}
+    - {id: service_far,         p1: [1.37, 18.285], p2: [9.60, 18.285]}
+    - {id: baseline_far,        p1: [0, 23.77],    p2: [10.97, 23.77]}
+    - {id: sideline_dbl_left,   p1: [0, 0],        p2: [0, 23.77]}
+    - {id: sideline_dbl_right,  p1: [10.97, 0],    p2: [10.97, 23.77]}
+    - {id: singles_left,        p1: [1.37, 0],     p2: [1.37, 23.77]}
+    - {id: singles_right,       p1: [9.60, 0],     p2: [9.60, 23.77]}
+    - {id: centre_service,      p1: [5.485, 5.485], p2: [5.485, 18.285]}
+    - {id: centre_mark_near,    p1: [5.485, 0],    p2: [5.485, 0.10]}
+    - {id: centre_mark_far,     p1: [5.485, 23.67], p2: [5.485, 23.77]}
+  fingerprint_lines: [service_near, service_far, centre_service, singles_left, singles_right]
+  zones:
+    front: {y_from_net_m: [0, 6.40]}
+    rear:  {y_from_net_m: [6.40, 11.885]}
+  base_position: [5.485, -1.0]   # just behind the near baseline centre
+net: {height_center: 0.914, height_post: 1.07}
+walls: []
+projectile:
+  kind: ball
+  size_m: 0.067
+  motion_model: ballistic_drag
+  drag_coefficient: 0.55
+  bounces: true
+  speed_range_kmh: [10, 260]
+  color_prior: [yellow, green]
+events: [serve, hit, bounce, net_touch, fault]
+scoring:
+  type: game_set
+  deuce: advantage            # advantage | golden_point
+  games_per_set: 6
+  tiebreak_at: 6              # 6-6 -> tiebreak
+  tiebreak_points: 7
+  sets_to_win: 2              # best of 3
+  final_set: {type: tiebreak, points: 7}   # tiebreak | advantage | match_tiebreak
+  serve_rule: alternate_games
+  variants:
+    best_of_5: {sets_to_win: 3}
+    match_tiebreak: {final_set: {type: match_tiebreak, points: 10}}
+shots:
+  serve: {first_hit_of_rally: true}
+  smash: {wrist_above_head: true, descent_deg_min: 15, not_serve: true}
+  volley: {no_bounce_before_hit: true, from_zone: front}
+  lob: {apex_m_min: 4.0}
+  groundstroke: {bounce_before_hit: true}
+capture: {min_fps: 60, recommended_fps: 120, camera: "behind baseline, 4-6 m high, centred"}

@@ -1,0 +1,32 @@
+# RallyOS — CPU environment (dev laptop). Python 3.11.
+# GPU machine: install requirements-gpu.txt FIRST, then this file (torch is then already satisfied).
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch>=2.3
+torchvision>=0.18
+
+# Vision core (installed as a package)
+-e ./core
+ultralytics>=8.3
+supervision>=0.25
+opencv-python>=4.10
+numpy>=1.26
+scipy>=1.13
+filterpy>=1.4.5
+librosa>=0.10
+soundfile>=0.12
+pyyaml>=6.0
+pandas>=2.2
+pyarrow>=16.0
+
+# API
+fastapi>=0.115
+uvicorn[standard]>=0.30
+sqlmodel>=0.0.21
+python-multipart>=0.0.9
+sse-starlette>=2.1
+httpx>=0.27
+python-dotenv>=1.0
+anthropic>=0.40
+
+# Tests
+pytest>=8.2

@@ -1,0 +1,44 @@
+{
+  "schema_version": "1.0",
+  "match_id": "m_001",
+  "sport": "badminton",
+  "sport_confidence": 0.96,
+  "video": {"src": "/media/m_001/source.mp4", "overlay": "/media/m_001/overlay.mp4",
+            "fps": 60, "width": 1920, "height": 1080, "duration_s": 132.4, "sha256": "…"},
+  "calibration": {"method": "auto", "homography": [[0,0,0],[0,0,0],[0,0,1]],
+                  "focal_px": 1450.0, "reprojection_error_px": 3.1},
+  "players": [
+    {"track_id": 1, "player_id": "p_anika", "name": "Anika", "side": "near", "color": "#3b82f6"},
+    {"track_id": 2, "player_id": "p_rohan", "name": "Rohan", "side": "far",  "color": "#ef4444"}
+  ],
+  "tracks_url": "/media/m_001/tracks.json",
+  "rallies": [
+    {"idx": 0, "t_start": 3.20, "t_end": 11.85, "hits": 9, "winner_track_id": 1,
+     "end_reason": "landing_in", "confidence": 0.82, "score_after": "1-0"}
+  ],
+  "events": [
+    {"id": "e_0001", "rally_idx": 0, "t": 3.41, "type": "hit", "track_id": 2,
+     "px": [960, 410], "court": [3.1, 11.9], "shot": "serve",
+     "speed_kmh": null, "speed_err_pct": null, "confidence": 0.93, "source": ["audio", "vision"]},
+    {"id": "e_0009", "rally_idx": 0, "t": 11.70, "type": "landing", "track_id": null,
+     "px": [702, 880], "court": [0.12, 1.4], "call": "IN", "call_prob": 0.84,
+     "ellipse_m": [0.09, 0.05, 12.0], "confidence": 0.78, "dispute_id": "d_001"}
+  ],
+  "score": {"games": [[21, 17], [19, 21], [21, 15]], "winner_track_id": 1, "confirmed_by_human": false},
+  "stats": {
+    "per_player": {
+      "1": {"distance_m": 812.0, "avg_return_to_base_s": 1.24, "split_step_pct": 0.61,
+            "shot_mix": {"smash": 14, "clear": 22, "drop": 11, "net": 18, "lift": 9, "drive": 6},
+            "avg_smash_kmh": 168, "heatmap_url": "/media/m_001/heatmap_1.png"}
+    },
+    "match": {"rallies": 98, "avg_rally_hits": 7.4, "longest_rally_hits": 31}
+  },
+  "disputes": [
+    {"id": "d_001", "event_id": "e_0009", "clip_url": "/media/m_001/d_001.mp4",
+     "call": "IN", "prob": 0.84, "status": "open"}
+  ],
+  "insights": [
+    {"player_track_id": 1, "text": "Return-to-base time rises from 1.1 s to 1.6 s after hit 8 of a rally — endurance, not technique.",
+     "stat_ids": ["per_player.1.avg_return_to_base_s"], "clip_t": [45.2, 78.9, 102.3]}
+  ]
+}

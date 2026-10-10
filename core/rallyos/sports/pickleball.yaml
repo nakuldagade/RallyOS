@@ -1,0 +1,51 @@
+sport: pickleball
+display_name: Pickleball
+court:
+  units: m
+  length: 13.41
+  width: 6.10
+  lines:
+    - {id: baseline_near,  p1: [0, 0],       p2: [6.10, 0]}
+    - {id: kitchen_near,   p1: [0, 4.575],   p2: [6.10, 4.575]}   # non-volley line, 2.13 m from net
+    - {id: net,            p1: [0, 6.705],   p2: [6.10, 6.705]}
+    - {id: kitchen_far,    p1: [0, 8.835],   p2: [6.10, 8.835]}
+    - {id: baseline_far,   p1: [0, 13.41],   p2: [6.10, 13.41]}
+    - {id: sideline_left,  p1: [0, 0],       p2: [0, 13.41]}
+    - {id: sideline_right, p1: [6.10, 0],    p2: [6.10, 13.41]}
+    - {id: centre_near,    p1: [3.05, 0],    p2: [3.05, 4.575]}
+    - {id: centre_far,     p1: [3.05, 8.835], p2: [3.05, 13.41]}
+  # Same outline as badminton: kitchen lines and no singles sidelines tell them apart.
+  fingerprint_lines: [kitchen_near, kitchen_far]
+  zones:
+    kitchen: {y_from_net_m: [0, 2.13]}
+    transition: {y_from_net_m: [2.13, 4.60]}
+    rear: {y_from_net_m: [4.60, 6.705]}
+  base_position: [3.05, 4.9]   # just behind the kitchen line
+net: {height_center: 0.86, height_post: 0.914}
+walls: []
+projectile:
+  kind: ball
+  size_m: 0.074
+  motion_model: ballistic_drag
+  drag_coefficient: 0.65      # perforated ball, slower
+  bounces: true
+  speed_range_kmh: [5, 110]
+  color_prior: [yellow, orange, green]
+events: [serve, hit, bounce, net_touch, kitchen_fault, fault]
+scoring:
+  type: side_out              # only the serving side scores
+  points_to_win: 11
+  win_by: 2
+  games_to_win: 2             # best of 3
+  first_server_number: 2      # "0-0-2": the first serving team gets one server only
+  next_game_server: alternate
+  variants:
+    rally: {type: rally_point, points_to_win: 11, win_by: 2, cap: null, serve_rule: winner_serves, next_game_server: alternate}
+shots:
+  serve: {first_hit_of_rally: true}
+  dink: {from_zone: kitchen, land_zone: kitchen, max_speed_kmh: 25}
+  drive: {apex_over_net_m_max: 0.5, min_speed_kmh: 40}
+  drop: {from_zone: [transition, rear], land_zone: kitchen}
+  lob: {apex_m_min: 3.5}
+  smash: {wrist_above_head: true, descent_deg_min: 20}
+capture: {min_fps: 60, recommended_fps: 120, camera: "behind baseline, 2-3 m high, centred"}

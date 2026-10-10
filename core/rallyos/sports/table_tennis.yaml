@@ -1,0 +1,49 @@
+sport: table_tennis
+display_name: Table tennis
+court:                       # the "court" is the table top
+  units: m
+  length: 2.74
+  width: 1.525
+  surface_height_m: 0.76
+  lines:
+    - {id: end_near,    p1: [0, 0],        p2: [1.525, 0]}
+    - {id: net,         p1: [0, 1.37],     p2: [1.525, 1.37]}
+    - {id: end_far,     p1: [0, 2.74],     p2: [1.525, 2.74]}
+    - {id: side_left,   p1: [0, 0],        p2: [0, 2.74]}
+    - {id: side_right,  p1: [1.525, 0],    p2: [1.525, 2.74]}
+    - {id: centre_line, p1: [0.7625, 0],   p2: [0.7625, 2.74]}   # doubles service line
+  fingerprint_lines: [centre_line]
+  zones:
+    short: {y_from_net_m: [0, 0.45]}
+    long:  {y_from_net_m: [0.45, 1.37]}
+  base_position: [0.7625, -0.8]   # standing ~0.8 m behind the end line
+net: {height_center: 0.1525, height_post: 0.1525, overhang_m: 0.1525}
+walls: []
+projectile:
+  kind: ball
+  size_m: 0.040
+  motion_model: ballistic_drag
+  drag_coefficient: 0.50
+  bounces: true
+  speed_range_kmh: [5, 120]
+  color_prior: [white, orange]
+events: [serve, hit, bounce, net_touch, let, fault]
+scoring:
+  type: rally_point
+  points_to_win: 11
+  win_by: 2
+  cap: null
+  games_to_win: 3            # best of 5
+  serve_rule: alternate
+  serve_every: 2
+  deuce_serve_every: 1       # from 10-10 serve changes every point
+  next_game_server: alternate
+  variants:
+    best_of_7: {games_to_win: 4}
+shots:
+  serve: {first_hit_of_rally: true}
+  smash: {wrist_above_head: true, max_flight_s: 0.25}
+  push: {land_zone: short, max_speed_kmh: 25}
+  loop: {apex_over_net_m_min: 0.25}
+  flick: {from_zone: short, max_flight_s: 0.35}
+capture: {min_fps: 120, recommended_fps: 240, camera: "side-on at table height + 0.5 m, net centred"}

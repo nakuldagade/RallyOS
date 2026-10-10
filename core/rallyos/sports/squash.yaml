@@ -1,0 +1,62 @@
+sport: squash
+display_name: Squash
+court:
+  units: m
+  length: 9.75
+  width: 6.40
+  # Origin = near-left corner at the BACK wall (camera behind the back wall); front wall at y = 9.75.
+  lines:
+    - {id: back_wall_floor,   p1: [0, 0],     p2: [6.40, 0]}
+    - {id: short_line,        p1: [0, 4.31],  p2: [6.40, 4.31]}   # 5.44 m from the front wall
+    - {id: front_wall_floor,  p1: [0, 9.75],  p2: [6.40, 9.75]}
+    - {id: side_left,         p1: [0, 0],     p2: [0, 9.75]}
+    - {id: side_right,        p1: [6.40, 0],  p2: [6.40, 9.75]}
+    - {id: half_court,        p1: [3.20, 0],  p2: [3.20, 4.31]}
+    - {id: box_left_side,     p1: [1.60, 2.71], p2: [1.60, 4.31]}  # 1.60 m service boxes
+    - {id: box_left_back,     p1: [0, 2.71],  p2: [1.60, 2.71]}
+    - {id: box_right_side,    p1: [4.80, 2.71], p2: [4.80, 4.31]}
+    - {id: box_right_back,    p1: [4.80, 2.71], p2: [6.40, 2.71]}
+  fingerprint_lines: [short_line, half_court, box_left_side, box_right_side]
+  zones:
+    front: {y_from_front_wall_m: [0, 3.5]}
+    mid:   {y_from_front_wall_m: [3.5, 6.0]}
+    back:  {y_from_front_wall_m: [6.0, 9.75]}
+  base_position: [3.20, 4.0]    # the T
+net: null
+# Front-wall template, coordinates (x across, z height) on the plane y = 9.75.
+walls:
+  - id: front
+    plane: "y=9.75"
+    lines:
+      - {id: tin,          p1: [0, 0.48], p2: [6.40, 0.48]}
+      - {id: service_line, p1: [0, 1.78], p2: [6.40, 1.78]}
+      - {id: out_line,     p1: [0, 4.57], p2: [6.40, 4.57]}
+  - {id: back, plane: "y=0", out_line_m: 2.13}
+  - {id: side_left,  plane: "x=0",    out_line_from_m: 4.57, out_line_to_m: 2.13}
+  - {id: side_right, plane: "x=6.40", out_line_from_m: 4.57, out_line_to_m: 2.13}
+projectile:
+  kind: ball
+  size_m: 0.040
+  motion_model: ballistic_drag
+  drag_coefficient: 0.50
+  bounces: true
+  wall_rebounds: true
+  speed_range_kmh: [10, 270]
+  color_prior: [black]
+events: [serve, hit, front_wall, bounce, wall_rebound, let, stroke, fault]
+scoring:
+  type: rally_point           # PAR
+  points_to_win: 11
+  win_by: 2
+  cap: null
+  games_to_win: 3             # best of 5
+  serve_rule: winner_serves   # hand-out on losing the rally
+  next_game_server: winner
+shots:
+  serve: {first_hit_of_rally: true}
+  drive: {land_zone: back, along_side_wall: true}
+  boast: {side_wall_before_front_wall: true}
+  drop: {land_zone: front, max_speed_kmh: 50}
+  lob: {front_wall_height_m_min: 3.5}
+  kill: {front_wall_height_m_max: 0.8, min_speed_kmh: 100}
+capture: {min_fps: 60, recommended_fps: 120, camera: "behind back wall (glass) or high in the gallery, centred"}

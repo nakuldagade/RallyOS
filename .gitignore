@@ -1,0 +1,26 @@
+# Videos, outputs, media (move via shared drive, never git)
+demo/**/*.mp4
+demo/out/
+media/
+third_party/
+
+# Model weights (downloaded pretrained only)
+*.pt
+*.pth
+
+# Secrets / envs
+.env
+.venv*/
+.venv*
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+*.db
+
+# Node / Next.js
+node_modules/
+.next/
+web/.env.local

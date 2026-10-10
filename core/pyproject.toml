@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rallyos-core"
+version = "0.1.0"
+description = "RallyOS: training-free racket-sports intelligence from one camera"
+requires-python = ">=3.11"
+dependencies = ["pyyaml>=6.0", "numpy>=1.26"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.2"]
+
+[tool.setuptools.packages.find]
+include = ["rallyos*"]
+
+[tool.setuptools.package-data]
+"rallyos.sports" = ["*.yaml"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
