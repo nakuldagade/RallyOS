@@ -54,6 +54,8 @@ export interface MatchEvent {
   shot?: string | null;
   speed_kmh?: number | null;
   speed_err_pct?: number | null;
+  speed_basis?: string;      // "hit-to-hit" | "hit-to-landing": which two points the average was taken between
+  speed_why_not?: string;    // why no speed was given
   confidence: number;
   source?: string[];
   t_audio?: number;          // onset time heard at the microphone (s)

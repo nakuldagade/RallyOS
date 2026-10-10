@@ -15,7 +15,7 @@ Stages in this version:
   outcome    landing after each rally's last hit -> IN/OUT probability + uncertainty ellipse -> suggested
              rally winner -> score via the sport's rules engine (needs calibration; human confirms);
              calls below 90% get a Fair-Play Replay clip (6 s, half speed, trail drawn)
-Not built yet (reported as skipped, never faked): shot types, speeds.
+Not built yet (reported as skipped, never faked): shot types.
 """
 
 from __future__ import annotations
@@ -49,7 +49,7 @@ class Analyzer:
     STAGE_WEIGHTS_AUTO = {"calibrate": 0.26, "players": 0.62, "audio": 0.06, "ball": 0.01, "rallies": 0.01,
                           "outcome": 0.02, "analytics": 0.01, "render": 0.01}
     SKIPPED_STAGES: tuple[str, ...] = ()
-    NOT_COMPUTED = ["shot types", "speeds"]
+    NOT_COMPUTED = ["shot types"]
 
     def __init__(self, sport: str = "auto", device: str | None = None, taps: list | None = None,
                  names: dict[int, str] | None = None, match_id: str | None = None,
@@ -276,6 +276,9 @@ class Analyzer:
                              "call": e["call"], "prob": e["call_prob"], "status": "open"})
         for e in landings:
             e.pop("frame", None)
+        from rallyos.analytics.speed import annotate_speeds, player_speed_stats
+
+        speed_summary = annotate_speeds(events, fps, cfg) if H is not None else None
         score = score_rallies(cfg, rallies, {1: 0, 2: 1}) if H is not None else             {"games": [], "winner_track_id": None, "confirmed_by_human": False, "source": None,
              "unresolved_rallies": len(rallies)}
         _dump(out / "stage_outcome.json", {"landings": landings, "disputes": disputes, "score": score,
@@ -294,6 +297,7 @@ class Analyzer:
                      "hits": sum(1 for e in events if e["track_id"] == tid)}
             stats.update(movement_stats(pts))
             stats.update(zone_time([c for _, c in pts], cfg, "near" if tid == 1 else "far"))
+            stats.update(player_speed_stats(events).get(tid, {}))
             per_player[str(tid)] = stats
         rally_hits = [r["hits"] for r in rallies]
         players_meta = [{"track_id": tid, "player_id": None, "name": self.names[tid], "side": side,
@@ -321,6 +325,7 @@ class Analyzer:
                           "longest_rally_hits": max(rally_hits, default=0)},
                 "ball": {**ball_stats(raw, balls, fps), "hit_candidates": len(hits), "tracker": "geometric",
                          "model": "three-frame differencing + physics-consistent tracklets (no trained ball detector)"},
+                "speed": speed_summary,
                 "audio": {**audio_info, "method": "band-limited spectral flux, sample-precise onsets (no training)"},
                 "pipeline": {"device": self.device, "imgsz": self.imgsz, "player_stride": self.stride,
                              "players_backend": pose_backend if detector is not None else None,
@@ -329,7 +334,7 @@ class Analyzer:
                              "players_skipped_reason": None if detector is not None else pose_backend,
                              "processing_s": round(time.time() - t0, 1), "stage_seconds": stage_seconds,
                              "not_computed": self.NOT_COMPUTED + ([] if detector is not None else ["players + pose"])
-                             + ([] if H is not None else ["line calls + score (need court calibration: 4 taps)"])},
+                             + ([] if H is not None else ["speeds, line calls and score (need the court: automatic detection or 4 corners)"])},
             },
             "disputes": disputes,
             "insights": [],
