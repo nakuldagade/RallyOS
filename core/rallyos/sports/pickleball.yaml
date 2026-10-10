@@ -16,6 +16,8 @@ court:
     - {id: centre_far,     p1: [3.05, 8.835], p2: [3.05, 13.41]}
   # Same outline as badminton: kitchen lines and no singles sidelines tell them apart.
   fingerprint_lines: [kitchen_near, kitchen_far]
+  # landing area that counts as IN, [x_min, x_max, y_min, y_max] in metres (line = in)
+  in_bounds: {singles: [0, 6.10, 0, 13.41], doubles: [0, 6.10, 0, 13.41]}
   zones:
     kitchen: {y_from_net_m: [0, 2.13]}
     transition: {y_from_net_m: [2.13, 4.60]}
@@ -48,4 +50,5 @@ shots:
   drop: {from_zone: [transition, rear], land_zone: kitchen}
   lob: {apex_m_min: 3.5}
   smash: {wrist_above_head: true, descent_deg_min: 20}
+audio: {band_hz: [1500, 10000], min_gap_s: 0.2, contact_height_m: 1.0}   # hit-onset detector (4.4)
 capture: {min_fps: 60, recommended_fps: 120, camera: "behind baseline, 2-3 m high, centred"}

@@ -49,7 +49,7 @@ def _run(job_id: str, video_path: Path, sport: str, taps: Optional[list], names:
         out = settings.out_dir / match_id
         out.mkdir(parents=True, exist_ok=True)
         job["skipped"] = list(Analyzer.SKIPPED_STAGES)
-        stage_base = {"calibrate": 0.0, "players": 0.05, "ball": 0.85, "rallies": 0.9, "analytics": 0.93, "render": 0.96}
+        stage_base = {"calibrate": 0.0, "players": 0.05, "audio": 0.85, "ball": 0.87, "rallies": 0.9, "analytics": 0.93, "render": 0.96}
         stage_span = {"players": 0.8}
 
         def progress(stage: str, frac: float) -> None:

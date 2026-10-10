@@ -164,7 +164,7 @@ Don't assume YOLO will reliably detect a 4 cm blurred ball. It won't. Instead:
 7. **Optional plug-in:** an existing pretrained tracker for one sport (e.g. TrackNetV3 for badminton). Use it only if available, and *never fine-tune it*. The geometry-based pipeline stays the default, so the "no training" claim holds for any new sport.
 
 ### 4.4 "Hear the Rally": combining sound and video to detect hits (biggest underrated trick)
-- **Hits make a sharp sound.** A standard onset detector (spectral flux, via librosa) finds them with no training, and the same method works for every sport.
+- **Hits make a sharp sound.** A standard onset detector (spectral flux, numpy only) finds them with no training, and the same method works for every sport.
 - **Sound gives much better timing.** Audio is sampled 44,100 times a second, versus 30–60 video frames a second. So hit times are accurate to about **1 ms instead of 16–33 ms**.
 - **Correct for the speed of sound** (few teams will think of this). A hit 13 m from the camera reaches the microphone about 38 ms late. Subtract `distance(hitter, camera) / 343`, using the hitter's court position from H.
 - **Confirm hits using both signals.** A hit counts when a sound spike lines up with the shuttle changing direction near a player's wrist. When the shuttle is lost, sound alone still counts hits, so rally length stays reliable.
@@ -406,7 +406,7 @@ flowchart LR
 
 | Layer | Choice | Why |
 |---|---|---|
-| Vision / ML | Python 3.11, OpenCV, `ultralytics` (YOLO11n + pose), `supervision` (ByteTrack, drawing tools), NumPy/SciPy, `filterpy`, `librosa`, ffmpeg | All install with pip, pretrained models included, fast to build with |
+| Vision / ML | Python 3.11, OpenCV, `ultralytics` (YOLO11n + pose), `supervision` (ByteTrack, drawing tools), NumPy/SciPy, `filterpy`, ffmpeg (bundled via `imageio-ffmpeg`) | All install with pip, pretrained models included, fast to build with |
 | Backend | **FastAPI** + simple in-process job queue (product: Celery/RQ + Redis), live progress updates (server-sent events) | Fast to build; automatic API docs double as SDK docs |
 | Database | SQLite (via SQLModel) for the hackathon → Postgres (Supabase) for the product | No setup now, easy to migrate later |
 | Storage | Local disk → S3 / Cloudflare R2 | |

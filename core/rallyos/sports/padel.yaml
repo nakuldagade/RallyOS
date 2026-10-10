@@ -14,6 +14,8 @@ court:
     - {id: sideline_right, p1: [10, 0],    p2: [10, 20]}
     - {id: centre_service, p1: [5, 3.05],  p2: [5, 16.95]}
   fingerprint_lines: [service_near, service_far, centre_service]
+  # landing area that counts as IN, [x_min, x_max, y_min, y_max] in metres (line = in)
+  in_bounds: {singles: [0, 10.0, 0, 20.0], doubles: [0, 10.0, 0, 20.0]}
   zones:
     net:  {y_from_net_m: [0, 4.0]}
     mid:  {y_from_net_m: [4.0, 6.95]}
@@ -56,4 +58,5 @@ shots:
   lob: {apex_m_min: 4.0}
   volley: {no_bounce_before_hit: true, from_zone: net}
   wall_return: {wall_rebound_before_hit: true}
+audio: {band_hz: [1500, 10000], min_gap_s: 0.2, contact_height_m: 1.0}   # hit-onset detector (4.4)
 capture: {min_fps: 60, recommended_fps: 120, camera: "behind back glass, 3-4 m high, centred"}

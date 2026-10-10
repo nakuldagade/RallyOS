@@ -22,8 +22,9 @@ def segment_rallies(hits: list[dict], duration_s: float, max_pause_s: float = 4.
             "t_end": round(min(duration_s, g[-1]["t"] + tail_s), 2),
             "hits": len(g),
             "winner_track_id": None, "end_reason": None, "score_after": None,
-            # vision-only hits: mean hit confidence, discounted until audio onsets confirm them
-            "confidence": round(0.8 * sum(h["confidence"] for h in g) / len(g), 2),
+            # mean hit confidence; hits not confirmed by audio + vision together are discounted
+            "confidence": round(sum(h["confidence"] * (1.0 if len(h.get("source", ())) > 1 else 0.8)
+                                    for h in g) / len(g), 2),
             "hit_frames": [h["frame"] for h in g],
         })
     return rallies

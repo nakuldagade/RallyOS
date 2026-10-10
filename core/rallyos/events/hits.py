@@ -2,12 +2,15 @@
 
 trajectory_hits finds vision-only hit candidates from the ball track: a hit is an abrupt reversal with
 a speed jump, while an apex is a gradual turn. It works in image pixels, so it needs no calibration.
-Audio onsets (audio/onsets.py) will confirm these and add hits hidden in tracking gaps.
+fuse_audio combines them with audio onsets (audio/onsets.py): confirmed hits get sample-precise times,
+and onsets inside tracking gaps add hits the shuttle path missed.
 """
 
 from __future__ import annotations
 
 import math
+
+import numpy as np
 
 REF_WIDTH = 1920
 REF_FPS = 25.0
@@ -150,3 +153,111 @@ def attribute_hits(hits: list[dict], frames: list[dict], frame_h: int, max_dist_
         out.append({**h, "track_id": best[1] if ok else None,
                     "confidence": h["confidence"] if ok else round(h["confidence"] * 0.7, 2)})
     return out
+
+
+def _hitter(frames: list[dict], frame: int, track_id) -> dict | None:
+    if track_id is None or not 0 <= frame < len(frames):
+        return None
+    return next((p for p in frames[frame]["players"] if p["track_id"] == track_id), None)
+
+
+def _delay(frames: list[dict], frame: int, track_id, camera_m, contact_h: float) -> float | None:
+    """Speed-of-sound delay from the hitter's court position to the camera, or None if unknown."""
+    p = _hitter(frames, frame, track_id)
+    if camera_m is None or p is None or not p.get("court"):
+        return None
+    cx, cy, cz = camera_m
+    return math.dist((p["court"][0], p["court"][1], contact_h), (cx, cy, cz)) / 343.0
+
+
+def fuse_audio(hits: list[dict], onsets: list[dict], fps: float, frames: list[dict], camera_m=None,
+               allow_audio_only: bool = True, min_gap_s: float = 0.15, contact_h: float = 1.5,
+               min_audio_only_conf: float = 0.6) -> tuple[list[dict], dict]:
+    """Combine vision hit candidates (after attribute_hits) with audio onsets (§4.4).
+
+    1. A/V sync: phone videos can carry an audio/video offset. With >= 3 onsets near a vision hit, the
+       median residual (after the sound delay) is that offset; it is removed from every onset.
+    2. Match onsets to vision hits one-to-one within ~2.5 frames. A match is a confirmed hit: its time comes
+       from the audio (sample precise, minus distance(hitter, camera) / 343 when the camera is calibrated)
+       and the two confidences combine.
+    3. Vision hits with no sound are kept but discounted. Onsets with no vision hit (shuttle hidden or
+       blurred) become audio-only hits when the sport has no bounces (a bounce sounds like a hit) and the
+       onset is strong; the hitter is inferred from alternation and flagged.
+    Returns (time-ordered hits, info for stats.audio).
+    """
+    tol = max(2.5 / fps, 0.06)
+    for h in hits:
+        h.setdefault("source", ["vision"])
+    info = {"onsets": len(onsets), "matched": 0, "audio_only": 0, "vision_only": len(hits),
+            "av_offset_s": 0.0, "sound_delay_corrected": camera_m is not None, "mean_sound_delay_ms": None}
+    if not onsets:
+        return sorted(hits, key=lambda h: h["t"]), info
+
+    def corr(h):
+        d = _delay(frames, h["frame"], h.get("track_id"), camera_m, contact_h)
+        return d or 0.0
+
+    near = []
+    for o in onsets:
+        best = min(hits, key=lambda h: abs(o["t"] - corr(h) - h["t"]), default=None)
+        if best is not None and abs(o["t"] - corr(best) - best["t"]) < 0.25:
+            near.append(o["t"] - corr(best) - best["t"])
+    offset = float(np.median(near)) if len(near) >= 3 else 0.0
+    info["av_offset_s"] = round(offset, 3)
+
+    pairs = sorted(((abs(o["t"] - offset - corr(h) - h["t"]), oi, hi)
+                    for oi, o in enumerate(onsets) for hi, h in enumerate(hits)), key=lambda x: x[0])
+    used_o, used_h, out, delays = set(), set(), [], []
+    for dt, oi, hi in pairs:
+        if dt > tol or oi in used_o or hi in used_h:
+            continue
+        used_o.add(oi), used_h.add(hi)
+        h, o = hits[hi], onsets[oi]
+        d = _delay(frames, h["frame"], h.get("track_id"), camera_m, contact_h)
+        if d is not None:
+            delays.append(d)
+        t = o["t"] - offset - (d or 0.0)
+        out.append({**h, "t": round(t, 3), "frame": min(len(frames) - 1, max(0, round(t * fps))),
+                    "t_audio": o["t"], "sound_delay_ms": round(d * 1000, 1) if d is not None else None,
+                    "confidence": round(min(0.97, 1 - (1 - h["confidence"]) * (1 - o["confidence"])), 2),
+                    "source": ["audio", "vision"]})
+    for hi, h in enumerate(hits):
+        if hi not in used_h:
+            out.append({**h, "confidence": round(h["confidence"] * 0.8, 2), "source": ["vision"]})
+    info["matched"] = len(used_o)
+    info["vision_only"] = len(hits) - len(used_h)
+
+    if allow_audio_only:
+        for oi, o in enumerate(onsets):
+            if oi in used_o or o["confidence"] < min_audio_only_conf:
+                continue
+            t = o["t"] - offset
+            if any(abs(t - h["t"]) < min_gap_s for h in out):
+                continue
+            f = min(len(frames) - 1, max(0, round(t * fps)))
+            ball = frames[f].get("ball") if frames else None
+            out.append({"frame": f, "t": round(t, 3), "px": ball["px"] if ball else None, "dv": 0.0, "turn_deg": None,
+                        "track_id": None, "t_audio": o["t"], "sound_delay_ms": None,
+                        "confidence": round(0.6 * o["confidence"], 2), "source": ["audio"]})
+            info["audio_only"] += 1
+    out.sort(key=lambda h: h["t"])
+
+    # singles: hits alternate, so a hit with no attributed hitter gets the other player of a neighbour
+    ids = {p["track_id"] for fr in frames for p in fr["players"]}
+    if ids and ids <= {1, 2} and len(ids) == 2:
+        for i, h in enumerate(out):
+            if h.get("track_id") is not None:
+                continue
+            prev = next((x["track_id"] for x in reversed(out[:i]) if x.get("track_id") is not None), None)
+            nxt = next((x["track_id"] for x in out[i + 1:] if x.get("track_id") is not None), None)
+            guess = (3 - prev) if prev else (3 - nxt) if nxt else None
+            if guess is not None:
+                h["track_id"], h["hitter_inferred"] = guess, True
+                if "audio" in h["source"] and h.get("sound_delay_ms") is None:
+                    d = _delay(frames, h["frame"], guess, camera_m, contact_h)
+                    if d is not None:
+                        h["t"], h["sound_delay_ms"] = round(h["t"] - d, 3), round(d * 1000, 1)
+                        h["frame"] = min(len(frames) - 1, max(0, round(h["t"] * fps)))
+    if delays:
+        info["mean_sound_delay_ms"] = round(1000 * sum(delays) / len(delays), 1)
+    return out, info

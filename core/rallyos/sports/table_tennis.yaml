@@ -13,6 +13,8 @@ court:                       # the "court" is the table top
     - {id: side_right,  p1: [1.525, 0],    p2: [1.525, 2.74]}
     - {id: centre_line, p1: [0.7625, 0],   p2: [0.7625, 2.74]}   # doubles service line
   fingerprint_lines: [centre_line]
+  # landing area that counts as IN, [x_min, x_max, y_min, y_max] in metres (line = in)
+  in_bounds: {singles: [0, 1.525, 0, 2.74], doubles: [0, 1.525, 0, 2.74]}
   zones:
     short: {y_from_net_m: [0, 0.45]}
     long:  {y_from_net_m: [0.45, 1.37]}
@@ -46,4 +48,5 @@ shots:
   push: {land_zone: short, max_speed_kmh: 25}
   loop: {apex_over_net_m_min: 0.25}
   flick: {from_zone: short, max_flight_s: 0.35}
+audio: {band_hz: [1500, 10000], min_gap_s: 0.08, contact_height_m: 0.9}   # hit-onset detector (4.4)
 capture: {min_fps: 120, recommended_fps: 240, camera: "side-on at table height + 0.5 m, net centred"}

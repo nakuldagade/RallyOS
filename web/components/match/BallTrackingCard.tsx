@@ -29,7 +29,7 @@ export default function BallTrackingCard({ ball, calibrated }: { ball: BallStats
         <dt className="text-muted">Gap-filled frames</dt><dd className="text-right tabular-nums">{ball.interpolated_frames} (flagged)</dd>
         <dt className="text-muted">Longest gap</dt><dd className="text-right tabular-nums">{ball.longest_gap_s} s</dd>
         {ball.mean_conf != null && (<><dt className="text-muted">Mean confidence</dt><dd className="text-right tabular-nums">{pct(ball.mean_conf)}</dd></>)}
-        {ball.hit_candidates != null && (<><dt className="text-muted">Hit candidates</dt><dd className="text-right tabular-nums">{ball.hit_candidates} (vision only)</dd></>)}
+        {ball.hit_candidates != null && (<><dt className="text-muted">Hit candidates</dt><dd className="text-right tabular-nums">{ball.hit_candidates}</dd></>)}
       </dl>
       {ref && (
         <div className="rounded-lg border border-border p-2.5">
@@ -44,7 +44,7 @@ export default function BallTrackingCard({ ball, calibrated }: { ball: BallStats
         </div>
       )}
       <p className="text-[11px] text-muted">
-        Hits here come from sudden changes in the shuttle&apos;s path; hits hidden in tracking gaps are missed until audio onsets confirm them.
+        Hit candidates come from sudden changes in the shuttle&apos;s path; with a soundtrack, audio onsets confirm them and add hits hidden in tracking gaps.
         {calibrated
           ? " Shuttle speeds and landing calls are not computed yet, so none are shown."
           : " No court calibration on this clip, so positions are in video pixels: no speeds, landing calls or player sides are claimed."}

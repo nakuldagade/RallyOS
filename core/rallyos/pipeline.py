@@ -3,13 +3,19 @@
     python -m rallyos.pipeline <clip.mp4> --sport badminton --taps "[[x,y],[x,y],[x,y],[x,y]]" --out demo/out/<clip>/
 
 Stages in this version:
-  calibrate  4-tap homography (automatic Court Fingerprint not built yet; without taps: no court positions)
+  calibrate  4-tap homography (automatic Court Fingerprint not built yet; without taps: no court positions),
+             then focal length + camera position from that homography (self-calibration, 4.2)
   players    pretrained YOLO11n-pose at 1280 px, near/far roles (every `stride` frames)
   ball       three-frame-difference candidates + constant-velocity linking (geometric, no trained detector)
-  rallies    hit candidates from the shuttle path, attributed to the nearest wrist; rallies from pauses
+  audio      hit onsets from the soundtrack (band-limited spectral flux, sample-precise; 4.4)
+  rallies    hit candidates from the shuttle path, attributed to the nearest wrist, fused with audio onsets
+             (A/V sync, speed-of-sound correction, audio-only hits in tracking gaps); rallies from pauses
   analytics  per-player distance / top speed / coverage (needs calibration), ball tracking stats
   render     match.json + tracks.json + source video (the web app draws the overlay live)
-Not built yet (reported as skipped, never faked): audio onsets, shot types, speeds, line calls, score.
+  outcome    landing after each rally's last hit -> IN/OUT probability + uncertainty ellipse -> suggested
+             rally winner -> score via the sport's rules engine (needs calibration; human confirms);
+             calls below 90% get a Fair-Play Replay clip (6 s, half speed, trail drawn)
+Not built yet (reported as skipped, never faked): shot types, speeds.
 """
 
 from __future__ import annotations
@@ -31,8 +37,8 @@ PLAYER_COLORS = {1: "#3b82f6", 2: "#ef4444"}
 
 
 class Analyzer:
-    SKIPPED_STAGES = ("audio",)
-    NOT_COMPUTED = ["audio onsets", "shot types", "speeds", "line calls", "automatic score"]
+    SKIPPED_STAGES: tuple[str, ...] = ()
+    NOT_COMPUTED = ["shot types", "speeds"]
 
     def __init__(self, sport: str = "auto", device: str | None = None, taps: list | None = None,
                  names: dict[int, str] | None = None, match_id: str | None = None,
@@ -52,10 +58,12 @@ class Analyzer:
         """Process a clip, writing each stage's output (and finally match.json) into out_dir. Returns out_dir."""
         import cv2
 
+        from rallyos.audio.onsets import detect_onsets, load_audio
+        from rallyos.calibration.camera import camera_from_homography
         from rallyos.calibration.template_fit import homography_from_taps
         from rallyos.detect.ball_candidates import BallCandidateDetector
         from rallyos.detect.players import PlayerSelector, find_static_people, load_pose_detector
-        from rallyos.events.hits import attribute_hits, detect_hits
+        from rallyos.events.hits import attribute_hits, detect_hits, fuse_audio
         from rallyos.events.rallies import segment_rallies
         from rallyos.export import NO_CALIBRATION, ball_stats, write_outputs
         from rallyos.track.ball_dp import link_candidates
@@ -76,6 +84,10 @@ class Analyzer:
         emit("calibrate", 0.02)
         calib = homography_from_taps(self.taps, cfg) if self.taps else dict(NO_CALIBRATION)
         H = np.array(calib["homography"]) if self.taps else None
+        camera = camera_from_homography(H, W, Hh) if H is not None else None
+        if camera:
+            calib["focal_px"] = camera["focal_px"]
+            calib["camera_position_m"] = camera["position_m"]
         _dump(out / "stage_calibration.json", calib)
         x_range = None
         if self.taps:
@@ -118,6 +130,14 @@ class Analyzer:
         cands.append([])                           # last frame has no successor
         cands = cands[:n]
 
+        # -- audio onsets ---------------------------------------------------------------------------------
+        emit("audio", 0.1)
+        acfg = cfg.get("audio", {})
+        samples, audio_status = load_audio(video)
+        onsets = detect_onsets(samples, 44100, min_gap_s=acfg.get("min_gap_s", 0.15),
+                               band_hz=acfg.get("band_hz", (1500, 10000))) if samples is not None else []
+        _dump(out / "stage_audio.json", {"status": audio_status, "sample_rate": 44100, "onsets": onsets})
+
         # -- who is a player: drop static people (officials), then court + size checks per frame --------
         statics = find_static_people([d for _, d in sampled], Hh)
         selector = PlayerSelector(H, cfg["court"], Hh, statics)
@@ -149,6 +169,12 @@ class Analyzer:
         # -- events ---------------------------------------------------------------------------------------
         emit("rallies", 0.3)
         hits = attribute_hits(detect_hits(balls, fps=fps, width=W), frames, Hh)
+        hits, audio_info = fuse_audio(hits, onsets, fps, frames, camera_m=camera["position_m"] if camera else None,
+                                      allow_audio_only=not cfg["projectile"].get("bounces", False),
+                                      min_gap_s=acfg.get("min_gap_s", 0.15),
+                                      contact_h=acfg.get("contact_height_m", 1.5))
+        audio_info = {"status": audio_status, **audio_info}
+        _dump(out / "stage_hits.json", {"audio": audio_info, "hits": hits})
         duration = round(n / fps, 3)
         rallies = segment_rallies(hits, duration)
         rally_of = {fr: r["idx"] for r in rallies for fr in r["hit_frames"]}
@@ -160,10 +186,40 @@ class Analyzer:
             events.append({
                 "id": f"e_{len(events) + 1:04d}", "rally_idx": rally_of[h["frame"]], "t": h["t"], "type": "hit",
                 "track_id": h["track_id"], "px": h["px"], "court": hitter["court"] if hitter else None,
-                "shot": None, "speed_kmh": None, "speed_err_pct": None, "confidence": h["confidence"], "source": ["vision"],
+                "shot": None, "speed_kmh": None, "speed_err_pct": None, "confidence": h["confidence"],
+                "source": h.get("source", ["vision"]),
+                **{k: h[k] for k in ("t_audio", "sound_delay_ms", "hitter_inferred") if h.get(k) is not None},
             })
+
+        # -- rally outcome: landing -> line call -> suggested winner -> score -------------------------------
+        from rallyos.analytics.linecall import DISPUTE_BELOW, resolve_rally_ends, score_rallies
+        from rallyos.render.clips import render_review_clip
+
+        landings = resolve_rally_ends(rallies, hits, balls, frames, cfg, fps, W, H=H, camera=camera)
         for r in rallies:
             r.pop("hit_frames")
+        events = sorted(events + landings, key=lambda e: (e["t"], e["type"] != "hit"))
+        for i, e in enumerate(events):
+            e["id"] = f"e_{i + 1:04d}"
+        disputes = []
+        for e in events:
+            if e["type"] != "landing" or "call" not in e:
+                continue
+            certain = e["call_prob"] if e["call"] != "TOO CLOSE TO CALL" else 0.0
+            if certain >= DISPUTE_BELOW:
+                continue
+            did = f"d_{len(disputes) + 1:03d}"
+            ok = render_review_clip(video, out / f"{did}.mp4", e["t"], fps, balls, e["px"], e["frame"],
+                                    e["call"], e["call_prob"])
+            e["dispute_id"] = did
+            disputes.append({"id": did, "event_id": e["id"], "clip_url": f"/media/{match_id}/{did}.mp4" if ok else None,
+                             "call": e["call"], "prob": e["call_prob"], "status": "open"})
+        for e in landings:
+            e.pop("frame", None)
+        score = score_rallies(cfg, rallies, {1: 0, 2: 1}) if H is not None else             {"games": [], "winner_track_id": None, "confirmed_by_human": False, "source": None,
+             "unresolved_rallies": len(rallies)}
+        _dump(out / "stage_outcome.json", {"landings": landings, "disputes": disputes, "score": score,
+                                          "rallies": rallies})
 
         # -- analytics ------------------------------------------------------------------------------------
         emit("analytics", 0.5)
@@ -196,22 +252,24 @@ class Analyzer:
             "tracks_url": f"/media/{match_id}/tracks.json",
             "rallies": rallies,
             "events": events,
-            "score": {"games": [], "winner_track_id": None, "confirmed_by_human": False},
+            "score": score,
             "stats": {
                 "per_player": {k: v for k, v in per_player.items() if v["tracked_pct"] > 0},
                 "match": {"rallies": len(rallies), "avg_rally_hits": round(sum(rally_hits) / len(rallies), 1) if rallies else 0.0,
                           "longest_rally_hits": max(rally_hits, default=0)},
                 "ball": {**ball_stats(raw, balls, fps), "hit_candidates": len(hits), "tracker": "geometric",
                          "model": "three-frame differencing + physics-consistent tracklets (no trained ball detector)"},
+                "audio": {**audio_info, "method": "band-limited spectral flux, sample-precise onsets (no training)"},
                 "pipeline": {"device": self.device, "imgsz": self.imgsz, "player_stride": self.stride,
                              "players_backend": pose_backend if detector is not None else None,
                              "static_people_ignored": statics,
                              "ignored_detections": ignored_counts,
                              "players_skipped_reason": None if detector is not None else pose_backend,
                              "processing_s": round(time.time() - t0, 1),
-                             "not_computed": self.NOT_COMPUTED + ([] if detector is not None else ["players + pose"])},
+                             "not_computed": self.NOT_COMPUTED + ([] if detector is not None else ["players + pose"])
+                             + ([] if H is not None else ["line calls + score (need court calibration: 4 taps)"])},
             },
-            "disputes": [],
+            "disputes": disputes,
             "insights": [],
         }
         write_outputs(out, match, tracks, video=video)

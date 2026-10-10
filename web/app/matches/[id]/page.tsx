@@ -13,10 +13,12 @@ import { Badge, Card, ErrorBox, Loading, MockBanner } from "@/components/ui";
 import MiniCourt, { type CourtDot } from "@/components/court/MiniCourt";
 import VideoOverlay from "@/components/video/VideoOverlay";
 import RallyTimeline from "@/components/match/RallyTimeline";
+import RallyOutcomes from "@/components/match/RallyOutcomes";
 import Scoreboard from "@/components/match/Scoreboard";
 import StatCards from "@/components/match/StatCards";
 import ShotMix from "@/components/match/ShotMix";
 import InsightCard from "@/components/coach/InsightCard";
+import AudioCard from "@/components/match/AudioCard";
 import BallTrackingCard from "@/components/match/BallTrackingCard";
 
 type Tab = "stats" | "shots" | "events" | "insights";
@@ -102,6 +104,11 @@ function MatchVision() {
               <BallTrackingCard ball={m.stats.ball} calibrated={calibrated} />
             </Card>
           )}
+          {m.stats.audio && (
+            <Card title="Hits heard from audio">
+              <AudioCard audio={m.stats.audio} />
+            </Card>
+          )}
           <Card title="Score">
             {m.players.length ? (
               <Scoreboard matchId={m.match_id} score={m.score} players={m.players} canConfirm={!match.data?.mock} onConfirmed={setScore} />
@@ -109,6 +116,11 @@ function MatchVision() {
               <p className="text-sm text-muted">No players tracked in this clip yet, so there is no score. Players, pose and scoring appear once the player stage runs.</p>
             )}
           </Card>
+          {m.rallies.some((r) => r.end_reason) && (
+            <Card title="How each rally ended">
+              <RallyOutcomes match={m} onSeek={goto} />
+            </Card>
+          )}
           {calibrated ? (
           <Card title="Top-down view" actions={
             <select className="input py-1 text-xs" value={heatFor ?? ""} onChange={(e) => setHeatFor(e.target.value ? parseInt(e.target.value) : null)}>
@@ -161,7 +173,7 @@ function MatchVision() {
                     <td className="py-2 font-mono tabular-nums">{fmtTime(e.t)}</td>
                     <td>{e.type}</td>
                     <td>{e.track_id ? name(e.track_id) : "—"}</td>
-                    <td>{e.shot ?? (e.call ? `${e.call} (${pct(e.call_prob)})` : "—")}</td>
+                    <td>{e.shot ?? (e.call ? `${e.call} (${pct(e.call_prob)})` : e.note ? <span className="text-xs text-muted">no call</span> : "—")}</td>
                     <td className="tabular-nums">{speed(e.speed_kmh, e.speed_err_pct)}</td>
                     <td className="tabular-nums">{pct(e.confidence)}{e.interpolated ? " · interpolated" : ""}</td>
                     <td className="text-muted">{e.source?.join(" + ") ?? "vision"}</td>

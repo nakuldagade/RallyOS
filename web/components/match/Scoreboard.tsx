@@ -77,6 +77,12 @@ export default function Scoreboard({ matchId, score, players, canConfirm, onConf
         </tbody>
       </table>
 
+      {!score.confirmed_by_human && score.source && (
+        <p className="mt-2 text-xs text-muted">
+          Suggested from line calls{score.from_clip_start ? ", counted from 0-0 at the start of this clip" : ""}.
+          {score.unresolved_rallies ? ` ${score.unresolved_rallies} rall${score.unresolved_rallies === 1 ? "y has" : "ies have"} no suggested winner and ${score.unresolved_rallies === 1 ? "is" : "are"} not counted.` : ""}
+        </p>
+      )}
       <div className="mt-3 flex flex-wrap items-center gap-2">
         {score.confirmed_by_human ? (
           <Badge tone="green">✓ Confirmed by a human · video verified</Badge>

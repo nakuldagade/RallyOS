@@ -17,6 +17,8 @@ court:
     - {id: box_right_side,    p1: [4.80, 2.71], p2: [4.80, 4.31]}
     - {id: box_right_back,    p1: [4.80, 2.71], p2: [6.40, 2.71]}
   fingerprint_lines: [short_line, half_court, box_left_side, box_right_side]
+  # landing area that counts as IN, [x_min, x_max, y_min, y_max] in metres (line = in)
+  in_bounds: {singles: [0, 6.40, 0, 9.75], doubles: [0, 6.40, 0, 9.75]}
   zones:
     front: {y_from_front_wall_m: [0, 3.5]}
     mid:   {y_from_front_wall_m: [3.5, 6.0]}
@@ -59,4 +61,5 @@ shots:
   drop: {land_zone: front, max_speed_kmh: 50}
   lob: {front_wall_height_m_min: 3.5}
   kill: {front_wall_height_m_max: 0.8, min_speed_kmh: 100}
+audio: {band_hz: [1500, 10000], min_gap_s: 0.12, contact_height_m: 1.0}   # hit-onset detector (4.4)
 capture: {min_fps: 60, recommended_fps: 120, camera: "behind back wall (glass) or high in the gallery, centred"}

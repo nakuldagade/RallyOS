@@ -17,6 +17,7 @@ export interface Calibration {
   homography: number[][]; // image px -> court metres
   focal_px?: number | null;
   reprojection_error_px?: number | null;
+  camera_position_m?: [number, number, number] | null; // from self-calibration (x, y, height)
 }
 
 export interface PlayerRef {
@@ -36,6 +37,8 @@ export interface Rally {
   end_reason?: string | null;
   confidence: number;
   score_after?: string | null;
+  winner_confidence?: number | null; // suggested winner (from the landing + call); a human confirms
+  hitter_conflict?: boolean;         // last detected hitter disagrees with the landing side
 }
 
 export interface MatchEvent {
@@ -51,8 +54,14 @@ export interface MatchEvent {
   speed_err_pct?: number | null;
   confidence: number;
   source?: string[];
+  t_audio?: number;          // onset time heard at the microphone (s)
+  sound_delay_ms?: number;   // speed-of-sound correction applied
+  hitter_inferred?: boolean; // hitter from alternation, not from a wrist
   call?: string;
   call_prob?: number;
+  p_in?: number;
+  margin_m?: number;  // distance to the nearest in-bounds line (+ inside, - outside)
+  note?: string;      // why no call was made
   ellipse_m?: [number, number, number]; // semi-axis a, semi-axis b (m), angle (deg)
   dispute_id?: string;
   interpolated?: boolean;
@@ -71,6 +80,10 @@ export interface Score {
   winner_track_id?: number | null;
   confirmed_by_human?: boolean;
   rating_update?: RatingChange[];
+  score_str?: string;
+  source?: string | null;        // "suggested from line calls"
+  unresolved_rallies?: number;   // rallies with no suggested winner (not counted)
+  from_clip_start?: boolean;     // points counted from 0-0 at the start of the clip
 }
 
 export interface PlayerStats {
@@ -98,6 +111,18 @@ export interface Insight {
   clip_t: number[];
   player_track_id?: number | null;
   grounded?: boolean;
+}
+
+export interface AudioStats {
+  status: string; // "ok" | "no audio track" | ...
+  onsets: number;
+  matched: number;
+  audio_only: number;
+  vision_only: number;
+  av_offset_s: number;
+  sound_delay_corrected: boolean;
+  mean_sound_delay_ms?: number | null;
+  method?: string;
 }
 
 export interface BallStats {
@@ -133,6 +158,7 @@ export interface MatchJSON {
     per_player?: Record<string, PlayerStats>;
     match?: Record<string, number>;
     ball?: BallStats;
+    audio?: AudioStats;
     pipeline?: {
       device?: string;
       processing_s?: number;

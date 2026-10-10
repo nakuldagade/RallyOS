@@ -21,6 +21,8 @@ court:
     - {id: centre_far,         p1: [3.05, 8.68], p2: [3.05, 13.40]}
   # Distinguishing inner lines vs pickleball (same outline): doubles long-service line + singles sidelines.
   fingerprint_lines: [long_service_dbl_n, long_service_dbl_f, singles_left, singles_right]
+  # landing area that counts as IN, [x_min, x_max, y_min, y_max] in metres (line = in)
+  in_bounds: {singles: [0.46, 5.64, 0, 13.40], doubles: [0, 6.10, 0, 13.40]}
   zones:
     front: {y_from_net_m: [0, 1.98]}
     mid:   {y_from_net_m: [1.98, 4.20]}
@@ -53,4 +55,5 @@ shots:   # explainable rule thresholds
   net:   {from_zone: front, land_zone: front}
   lift:  {from_zone: front, land_zone: rear}
   drive: {apex_over_net_m_max: 0.6, max_flight_s: 0.7}
+audio: {band_hz: [1500, 10000], min_gap_s: 0.15, contact_height_m: 1.5}   # hit-onset detector (4.4)
 capture: {min_fps: 60, recommended_fps: 120, camera: "behind baseline, 2-3 m high, centred"}

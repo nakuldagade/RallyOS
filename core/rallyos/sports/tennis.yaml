@@ -18,6 +18,8 @@ court:
     - {id: centre_mark_near,    p1: [5.485, 0],    p2: [5.485, 0.10]}
     - {id: centre_mark_far,     p1: [5.485, 23.67], p2: [5.485, 23.77]}
   fingerprint_lines: [service_near, service_far, centre_service, singles_left, singles_right]
+  # landing area that counts as IN, [x_min, x_max, y_min, y_max] in metres (line = in)
+  in_bounds: {singles: [1.37, 9.60, 0, 23.77], doubles: [0, 10.97, 0, 23.77]}
   zones:
     front: {y_from_net_m: [0, 6.40]}
     rear:  {y_from_net_m: [6.40, 11.885]}
@@ -51,4 +53,5 @@ shots:
   volley: {no_bounce_before_hit: true, from_zone: front}
   lob: {apex_m_min: 4.0}
   groundstroke: {bounce_before_hit: true}
+audio: {band_hz: [1500, 10000], min_gap_s: 0.4, contact_height_m: 1.0}   # hit-onset detector (4.4)
 capture: {min_fps: 60, recommended_fps: 120, camera: "behind baseline, 4-6 m high, centred"}
