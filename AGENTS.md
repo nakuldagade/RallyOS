@@ -72,7 +72,7 @@ Status key: ✅ done and verified · 🟡 built but only partly proven (see the 
 | **B8 Live mode** (continuous capture, 5-second chunks; plan in `docs/live-mode-plan.md`) | 🟡 | In progress: see the phase table "Live mode: phases A to G" below. Baseline before any live work: 30.2 s to analyse a 9.96 s clip (real-time factor 3.03); the live target is under 0.6 |
 | **B7 Multi-sport + SDK** | 🟡 | `pip install -e core/`, `developers` page, `sports` page with YAML viewer, RacketVision plug-in (precomputed results). The court fingerprint recognises all 6 templates on generated courts and found a real table-tennis table. 🟡 No full real run yet on tennis / pickleball / padel / squash video. ❌ `volleyball.yaml` stub |
 
-Tests: `pytest` runs `core/tests` + `api/tests` (217 passing, 1 skipped on SQLite, about 1–2 minutes; the court-fit tests are the slow ones). API tests also run on Postgres: set `RALLYOS_TEST_DATABASE_URL` to a database whose name contains `test` (it is wiped), e.g. a local `pgserver` instance. The web app passes `tsc --noEmit`.
+Tests: `pytest` runs `core/tests` + `api/tests` (228 passing, 1 skipped on SQLite, about 1–2 minutes; the court-fit tests are the slow ones). API tests also run on Postgres: set `RALLYOS_TEST_DATABASE_URL` to a database whose name contains `test` (it is wiped), e.g. a local `pgserver` instance. The web app passes `tsc --noEmit`.
 
 ### Live mode: phases A to G (update the row of each phase when it is finished; say what was proven on a real camera)
 
@@ -80,7 +80,7 @@ Tests: `pytest` runs `core/tests` + `api/tests` (217 passing, 1 skipped on SQLit
 |---|---|---|---|
 | **A** | Event contract (SSE), per-session event log, mock replay producer, live dashboard `/live/demo`, match-page layout rebalanced | ✅ built | a processed match replayed through the real API and SSE; no camera |
 | **B** | `stages.py` (shared stages) + `StreamAnalyzer` (`core/rallyos/live/`) + `python -m rallyos.live.replay` + equivalence test | ✅ built and tested; **not real-time yet** (see numbers below) | a real broadcast clip replayed as 2 chunks; generated clips for the logic tests; no camera |
-| **C** | Real session API (create, sign, chunks, stop, SSE), ordered worker queue, local storage, finalise + import | ❌ | |
+| **C** | Real session API (create, sign, chunks, register-by-URL, corners, stop, resume, SSE), one ordered worker per session, local storage, finalise + import on stop, start-up warm-up | ✅ built and tested over real HTTP; **not real-time yet** | the real 10 s clip through a running server with the real pose model and the Supabase database (via `python -m api.live_client`); generated clips for the machinery tests; no browser, no camera |
 | **D** | Browser segmenter (two staggered MediaRecorders), IndexedDB outbox, `/capture` page, wake lock | ❌ | |
 | **E** | Cloudinary signed uploads, final stitch + upload, `match.json` schema 1.1 with the `live` block | ❌ | |
 | **F** | Speed work with measured numbers (court reuse, ROI gating, adaptive stride / width, ONNX, overlapped decode, graceful degradation) | ❌ | |
@@ -98,6 +98,18 @@ Tests: `pytest` runs `core/tests` + `api/tests` (217 passing, 1 skipped on SQLit
 | What this means for capture | | the browser's recording bitrate bounds shuttle detection: the capture page must ask for a high bitrate (8 Mbit/s or more at 1080p) |
 
 Exact equivalence is asserted in `core/tests/test_live_stream.py` on a generated clip written as MJPG (identical frames in chunks and whole file): same hits within 0.12 s, same rallies and end reasons, same homography, ball detection within 2%.
+
+### Live mode: what phase C measured (same 10 s clip, over HTTP to a running server, pose at 1280, corners given)
+
+| | Result |
+|---|---|
+| Path | `api.live_client` cuts the clip into 2 chunks, uploads each when the "camera" would have finished it, presses Stop; the server analyses in order, finalises, imports into Supabase, `GET /v1/matches/<id>` serves it |
+| Analysis per chunk (warm server) | 7.8-8.7 s for chunk 0 (5.5 s of video), 6.4-6.6 s for chunk 1 (5 s): factor 1.4-1.6, the same as the direct replay of phase B. Lag after the chunk finished: about 8 s for chunk 0, 14-15 s for chunk 1 because chunk 1 waited for chunk 0: **the backlog still grows (phase F)** |
+| First session after the server starts | 46 s for chunk 0 once (cold: PyTorch import and model load in a fresh process, plus Windows scanning new files). A background warm-up at start (4.2 s) brought it to 8.7 s. A cold start after a reboot may still be slower: run a short session before a demo |
+| Upload | 2.15 s for the first chunk (2.6 MB, includes opening the connection), 0.11 s for the next, on the same machine |
+| Not proven | a browser as the uploader, mobile networks, WebM chunks from MediaRecorder (cut and read correctly in tests, never recorded by a real browser), parallel sessions on one CPU |
+
+Honesty rules kept: a chunk repeated by a retry is acknowledged and not analysed twice; a chunk that never arrives is reported (`chunk_missing`) and its frames counted in `live.dropped_frames`; a broken chunk is reported (`chunk_failed`) and the session carries on; no landing, call or score before the rally's pause has passed.
 
 ### Measured so far (honest numbers, for the pitch and Q&A)
 

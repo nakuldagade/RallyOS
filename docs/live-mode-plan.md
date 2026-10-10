@@ -63,3 +63,8 @@ pass, dispute clips and the full-video checks). The status section of AGENTS.md 
   (chunks are separate recordings) removes the weakest hits and lowers shuttle detection by 4-5 points, so the capture page
   must request a high recording bitrate. Analysing a chunk takes 1.4-1.9x its length with pose at 1280 px: phase F is
   needed before this keeps up with real time. The first chunk also pays for loading the pose model.
+* **Phase C:** one worker thread per session analyses chunks strictly in order; a retry of a chunk is ignored, a missing one is
+  skipped after `RALLYOS_LIVE_MISSING_WAIT_S` and reported, a broken one is reported and does not stop the session. Stop takes the last
+  sequence number the client sent so the worker waits for chunks still in flight. A fresh server pays 20-40 s on its first
+  chunk (cold PyTorch import and model load): the server now warms up in the background at start.
+  `python -m api.live_client` behaves like the browser against a running server.

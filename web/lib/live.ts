@@ -109,6 +109,12 @@ export function liveReducer(s: LiveState, a: LiveAction): LiveState {
       return { ...base, stats: e as unknown as LiveStats };
     case "lag":
       return { ...base, lag: { lag_s: e.lag_s, max_lag_s: e.max_lag_s, avg_latency_s: e.avg_latency_s } };
+    case "recomputed":                                             // corners were corrected: everything was re-run from the stored chunks
+      return { ...base, events: e.events ?? [], rallies: e.rallies ?? [], stats: (e.stats as LiveStats) ?? s.stats, ballTrail: [] };
+    case "chunk_missing":
+      return { ...base, chunks: upsert(s.chunks, { seq: e.seq, t0: e.seq * s.chunkSeconds, t1: (e.seq + 1) * s.chunkSeconds, state: "failed" }) };
+    case "chunk_failed":
+      return e.seq >= 0 ? { ...base, chunks: upsert(s.chunks, { seq: e.seq, state: "failed" }) } : base;
     case "finalising":
       return { ...base, status: "finalising" };
     case "finalised":

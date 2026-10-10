@@ -1,4 +1,6 @@
 """FastAPI app.  Run from the repo root:  uvicorn api.main:app --reload --port 8000   (docs: /docs)"""
+import os
+import threading
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -7,6 +9,7 @@ from fastapi.staticfiles import StaticFiles
 
 from api.config import settings
 from api.db import backend, create_all
+from api.services import live as live_service
 from api.routers import (calibrate, coach, courts, disputes, live, matches, network, players, sports,
                          tournaments, videos)
 
@@ -14,6 +17,8 @@ from api.routers import (calibrate, coach, courts, disputes, live, matches, netw
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     create_all()
+    if os.getenv("RALLYOS_WARMUP", "1") != "0":                   # load the pose model before the first live chunk needs it
+        threading.Thread(target=live_service.warm_up, name="warmup", daemon=True).start()
     yield
 
 
@@ -29,4 +34,4 @@ app.mount("/media", StaticFiles(directory=str(settings.media_dir)), name="media"
 @app.get("/health")
 def health():
     return {"ok": True, "mock_fallback": settings.mock_fallback, "coach": "claude" if settings.anthropic_key else "template",
-            "database": backend()}
+            "database": backend(), "warmup": live_service.WARMUP}

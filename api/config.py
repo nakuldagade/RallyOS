@@ -41,6 +41,15 @@ class Settings:
     anthropic_key = os.getenv("ANTHROPIC_API_KEY", "")
     coach_model = os.getenv("RALLYOS_COACH_MODEL", "claude-sonnet-5-5")
     mock_fallback = os.getenv("MOCK_FALLBACK", "true").lower() == "true"
+    # live mode (continuous capture, analysed in chunks)
+    chunk_seconds = float(os.getenv("RALLYOS_CHUNK_SECONDS", "5"))
+    storage = os.getenv("RALLYOS_STORAGE", "local").strip().lower()          # local | cloudinary
+    live_dir = ROOT / "demo" / "out" / "live"
+    live_missing_wait_s = float(os.getenv("RALLYOS_LIVE_MISSING_WAIT_S", "15"))   # how long to wait for a chunk that skipped ahead
+    chunk_url_hosts = [h.strip() for h in os.getenv("RALLYOS_CHUNK_URL_HOSTS", "res.cloudinary.com").split(",") if h.strip()]
+    cloudinary_cloud = os.getenv("CLOUDINARY_CLOUD_NAME", "")
+    cloudinary_key = os.getenv("CLOUDINARY_API_KEY", "")
+    cloudinary_secret = os.getenv("CLOUDINARY_API_SECRET", "")
     cors_origins = ["http://localhost:3000", "http://127.0.0.1:3000"]
 
 

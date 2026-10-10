@@ -26,3 +26,4 @@ os.environ["MEDIA_DIR"] = str(_tmp / "media")
 os.environ["RUNTIME_DIR"] = str(_tmp / "runtime")
 os.environ["ANTHROPIC_API_KEY"] = ""
 os.environ["MOCK_FALLBACK"] = "true"
+os.environ["RALLYOS_WARMUP"] = "0"                        # do not load the pose model in the background during tests
