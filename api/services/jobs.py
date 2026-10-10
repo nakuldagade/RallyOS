@@ -15,6 +15,10 @@ from api.db import engine
 from api.services.importer import import_folder
 
 JOBS: dict[str, dict] = {}
+# The pipeline saturates the CPU, so two analyses at once each take far longer than one after the other
+# (an upload started while another ran saw its court calibration take 83 s instead of 8). One runs at a
+# time; the others show as queued.
+RUN_LOCK = threading.Semaphore(1)
 
 
 def _stage_table(taps_given: bool = True) -> tuple[list, dict]:
@@ -88,6 +92,15 @@ def _simulate(job: dict) -> None:
 def _run(job_id: str, video_path: Path, sport: str, taps: Optional[list], names: Optional[dict[int, str]],
          match_id: Optional[str] = None) -> None:
     job = JOBS[job_id]
+    job["note"] = "waiting for the analysis in front of it to finish"
+    with RUN_LOCK:
+        job.pop("note", None)
+        job["started"] = time.time()
+        _run_locked(job_id, job, video_path, sport, taps, names, match_id)
+
+
+def _run_locked(job_id: str, job: dict, video_path: Path, sport: str, taps: Optional[list],
+                names: Optional[dict[int, str]], match_id: Optional[str]) -> None:
     job["status"] = "running"
     try:
         from rallyos.pipeline import Analyzer

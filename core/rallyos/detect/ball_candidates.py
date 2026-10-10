@@ -33,6 +33,8 @@ class BallCandidateDetector:
         self.box_pad = box_pad           # pose-box enlargement (fraction of box width; height uses 2/3 of it)
         self.blob_pad = blob_pad         # big-moving-blob enlargement (fraction of blob width)
         self.scale = 1.0
+        self._roi_small = None
+        self._roi_src = None
 
     def prepare(self, frame_bgr: np.ndarray) -> np.ndarray:
         h, w = frame_bgr.shape[:2]
@@ -52,6 +54,13 @@ class BallCandidateDetector:
         hh, ww = cur.shape
         lin = ww / REF_WIDTH
         motion = cv2.min(cv2.absdiff(cur, prev), cv2.absdiff(nxt, cur))
+        if roi is not None:
+            # motion outside the court and the air above it (crowd, screens) is dropped before the expensive
+            # connected-component step: faster, and it removes false candidates too
+            if self._roi_small is None or self._roi_src is not roi or self._roi_small.shape != motion.shape:
+                self._roi_small = roi if roi.shape == motion.shape else cv2.resize(roi, (ww, hh), interpolation=cv2.INTER_NEAREST)
+                self._roi_src = roi
+            motion = cv2.bitwise_and(motion, motion, mask=self._roi_small)
         _, mask = cv2.threshold(motion, self.diff_thr, 255, cv2.THRESH_BINARY)
         mask = cv2.dilate(mask, np.ones((3, 3), np.uint8))
         n, _, stats, cents = cv2.connectedComponentsWithStats(mask, connectivity=8)

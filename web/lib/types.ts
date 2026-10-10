@@ -389,6 +389,7 @@ export interface Job {
   status: "queued" | "running" | "done" | "failed";
   stage: string | null;
   stages?: JobStage[];
+  note?: string | null;  // e.g. queued behind another analysis
   progress: number;
   match_id: string | null;
   error: string | null;

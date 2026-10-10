@@ -62,6 +62,7 @@ class Analyzer:
         self.match_id = match_id
         # 1280 px input finds the far player (~20 px tall at 640); RALLYOS_MAX_WIDTH lowers it for quick CPU runs
         self.imgsz = imgsz or int(os.environ.get("RALLYOS_MAX_WIDTH") or 1280)
+        self.imgsz_fixed = bool(imgsz or os.environ.get("RALLYOS_MAX_WIDTH"))   # otherwise sized from the far player
         self.stride = max(1, stride)
         self.auto_calibrate = auto_calibrate     # find the court lines automatically when no taps are given
 
@@ -151,6 +152,9 @@ class Analyzer:
                                        "ball_region_px": ball_poly.round(1).tolist() if ball_poly is not None else None})
 
         # -- players + ball candidates (one decode pass) ------------------------------------------------
+        # a smaller pose input was tried and rejected: at 704 px the far player was tracked in 6% of frames and at
+        # 896 px in 95% (Macau clip), so the full 1280 stays the default; RALLYOS_MAX_WIDTH lowers it on purpose
+        pose_note = "fixed by RALLYOS_MAX_WIDTH / imgsz" if self.imgsz_fixed else "default 1280 (keeps the far player)"
         emit("players", 0.0, "loading the pose model")
         detector, pose_backend = load_pose_detector(device=self.device, imgsz=self.imgsz)
         _dump(out / "stage_players_backend.json", {"available": detector is not None, "backend": pose_backend})
@@ -327,7 +331,7 @@ class Analyzer:
                          "model": "three-frame differencing + physics-consistent tracklets (no trained ball detector)"},
                 "speed": speed_summary,
                 "audio": {**audio_info, "method": "band-limited spectral flux, sample-precise onsets (no training)"},
-                "pipeline": {"device": self.device, "imgsz": self.imgsz, "player_stride": self.stride,
+                "pipeline": {"device": self.device, "imgsz": self.imgsz, "imgsz_basis": pose_note, "player_stride": self.stride,
                              "players_backend": pose_backend if detector is not None else None,
                              "static_people_ignored": statics,
                              "ignored_detections": ignored_counts,

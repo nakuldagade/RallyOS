@@ -50,11 +50,17 @@ def weights_path() -> Path:
     return p
 
 
+_MODELS: dict[tuple, object] = {}      # loaded once per process: a second upload does not pay the load time again
+
+
 class PoseDetector:
     def __init__(self, device: str | None = None, imgsz: int = 1280, conf: float = 0.25):
         from ultralytics import YOLO
 
-        self.model = YOLO(str(weights_path()))
+        path = str(weights_path())
+        if path not in _MODELS:
+            _MODELS[path] = YOLO(path)
+        self.model = _MODELS[path]
         self.device = get_device(device)
         self.imgsz = imgsz
         self.conf = conf

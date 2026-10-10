@@ -20,9 +20,10 @@ interface Props {
   sport?: string;           // "auto" tries every sport; otherwise only this sport's template
   onChange: (taps: Pt[] | null) => void;
   onDetected?: (d: CourtDetection | null) => void;   // lets the page use the detected sport
+  onBusy?: (busy: boolean) => void;                   // true while the court is being searched for
 }
 
-export default function CourtTapper({ file, src, sport = "auto", onChange, onDetected }: Props) {
+export default function CourtTapper({ file, src, sport = "auto", onChange, onDetected, onBusy }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [size, setSize] = useState<{ w: number; h: number } | null>(null);
   const [frame, setFrame] = useState<HTMLCanvasElement | null>(null);
@@ -41,6 +42,7 @@ export default function CourtTapper({ file, src, sport = "auto", onChange, onDet
     setDet(null);
     onChange(null);
     onDetected?.(null);
+    onBusy?.(false);
     if (!file && !src) return;
     // React (dev) mounts effects twice: the first run is cleaned up while its video is still loading.
     // A cancelled run must stay silent, otherwise its error event shows "can't preview" on the first upload.
@@ -82,6 +84,7 @@ export default function CourtTapper({ file, src, sport = "auto", onChange, onDet
     if (!frame) return;
     const id = ++runId.current;
     setDetecting(true);
+    onBusy?.(true);
     setDet(null);
     setTaps([]);
     onChange(null);
@@ -102,9 +105,12 @@ export default function CourtTapper({ file, src, sport = "auto", onChange, onDet
     } catch (e) {
       if (id === runId.current) setDet({ found: false, message: e instanceof Error ? e.message : String(e) });
     } finally {
-      if (id === runId.current) setDetecting(false);
+      if (id === runId.current) {
+        setDetecting(false);
+        onBusy?.(false);
+      }
     }
-  }, [frame, sport, size, onChange, onDetected]);
+  }, [frame, sport, size, onChange, onDetected, onBusy]);
 
   // Auto-detect as soon as the frame is ready, and again when the chosen sport changes.
   useEffect(() => {
@@ -195,6 +201,7 @@ export default function CourtTapper({ file, src, sport = "auto", onChange, onDet
   const manualReset = () => {
     runId.current++;                                     // cancel any detection still running
     setDetecting(false);
+    onBusy?.(false);
     setDet(null);
     setTaps([]);
     onChange(null);

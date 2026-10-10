@@ -59,6 +59,7 @@ export default function UploadPage() {
   const [sports, setSports] = useState<SportConfig[]>([]);
   const [taps, setTaps] = useState<[number, number][] | null>(null);
   const [detected, setDetected] = useState<CourtDetection | null>(null);
+  const [finding, setFinding] = useState(false);       // the court preview is running: wait for it, or it competes with the analysis
   const [nearName, setNearName] = useState("");
   const [farName, setFarName] = useState("");
   const [job, setJob] = useState<Job | null>(null);
@@ -120,13 +121,13 @@ export default function UploadPage() {
             <span className="text-sm font-medium">{file ? file.name : "Choose a video (MP4 / H.264 plays best in the browser)"}</span>
             <span className="text-xs text-muted">{file ? `${(file.size / 1e6).toFixed(1)} MB` : "Fixed camera behind the baseline, 2–3 m high, all 4 corners visible. Short clips (10–60 s) process fastest on CPU."}</span>
             <input type="file" accept="video/*" className="hidden"
-              onChange={(e) => { setFile(e.target.files?.[0] ?? null); setJob(null); setTaps(null); setDetected(null); e.target.value = ""; }} />
+              onChange={(e) => { setFile(e.target.files?.[0] ?? null); setJob(null); setTaps(null); setDetected(null); setFinding(!!e.target.files?.[0]); e.target.value = ""; }} />
           </label>
 
           {file && (
             <div>
               <div className="label mb-2">Court calibration</div>
-              <CourtTapper file={file} sport={sport} onChange={setTaps} onDetected={setDetected} />
+              <CourtTapper file={file} sport={sport} onChange={setTaps} onDetected={setDetected} onBusy={setFinding} />
               <p className="mt-1 text-xs text-muted">
                 Court positions (top-down view, distance, heatmap, line calls, score) need the court, and players are only looked for on and around it, so umpires and spectators are ignored.
                 {" "}If no corners are set here, the court is searched for automatically while analysing.
@@ -155,7 +156,10 @@ export default function UploadPage() {
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-3">
-            <button className="btn-primary" disabled={!file || busy} onClick={start}>{busy ? "Processing…" : "Upload & analyse"}</button>
+            <button className="btn-primary" disabled={!file || busy || finding} onClick={start}
+              title={finding ? "Wait for the court to be found, so the analysis can use it" : undefined}>
+              {busy ? "Processing…" : finding ? "Finding the court…" : "Upload & analyse"}
+            </button>
             {file && taps && <span className="text-xs text-emerald-600 dark:text-emerald-400">✓ Using these 4 corners: players and shuttle are searched on the court only</span>}
             {file && !taps && <span className="text-xs text-amber-600 dark:text-amber-400">No corners set: the court will be searched for automatically (applied only if the fit is clearly good).</span>}
           </div>
@@ -171,6 +175,7 @@ export default function UploadPage() {
             {job.status === "running" && <span className="text-xs font-normal text-muted">{elapsed} s elapsed</span>}
             <span className="ml-auto text-sm font-normal tabular-nums">{Math.round(job.progress * 100)}%</span>
           </span>}>
+          {job.note && <p className="mb-2 text-sm text-amber-600 dark:text-amber-400">Queued: {job.note}.</p>}
           <ConfidenceBar value={job.progress} tone={job.status === "failed" ? "red" : "accent"} />
           <ol className="mt-4 space-y-3">
             {(job.stages ?? []).map((st, i) => <StageRow key={st.id} st={st} index={i} />)}
