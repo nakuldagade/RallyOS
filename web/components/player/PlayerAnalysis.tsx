@@ -14,6 +14,7 @@ import type { AnalysisMatch, MetricValues, PlayerAnalysis as Analysis, SportConf
 import { useApi } from "@/lib/useApi";
 import { Badge, Card, ErrorBox, Loading, Stat } from "@/components/ui";
 import MiniCourt from "@/components/court/MiniCourt";
+import PlayerChat from "@/components/player/PlayerChat";
 
 const tooltipStyle = { background: "rgb(var(--card))", border: "1px solid rgb(var(--border))", borderRadius: 8 };
 const TREND_ORDER: { key: keyof MetricValues; label: string; unit: string }[] = [
@@ -100,6 +101,8 @@ export default function PlayerAnalysis({ playerId }: { playerId: string }) {
         <Stat label="Distance" value={`${s.distance_m} m`} hint="all matches" />
         <Stat label="Tracked" value={`${Math.round(s.frames_tracked / 25)} s`} hint="of court position" />
       </div>
+
+      <PlayerChat playerId={playerId} name={a.player.name} />
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_380px]">
         <Card title="Where you play: heatmap of every analysed match"

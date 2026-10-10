@@ -82,6 +82,8 @@ export const api = {
   registerAccount: (body: { name: string; email: string; password: string; role: "player" | "coach" }) =>
     request<{ token: string; user: AuthUser }>("/v1/auth/register", post(body)),
   me: () => request<AuthUser>("/v1/auth/me"),
+  playerChat: (id: string, messages: { role: string; content: string }[]) =>
+    request<{ answer: string; source: string; match_ids: string[] }>(`/v1/players/${encodeURIComponent(id)}/chat`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messages }) }),
   playerAnalysis: (id: string) => request<PlayerAnalysis>(`/v1/players/${encodeURIComponent(id)}/analysis`),
   coachDashboard: () => request<CoachDashboard>("/v1/coach/dashboard"),
   addToRoster: (playerId: string) => request<unknown>("/v1/coach/roster", post({ player_id: playerId })),

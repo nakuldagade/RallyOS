@@ -112,12 +112,30 @@ function MatchVision() {
         <Link href={`/matches/${m.match_id}/report`} className="btn-primary">AI coach report →</Link>
       </div>
 
+      <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        {[
+          ["Score", m.score.games.length ? m.score.games.map((g) => g.join("–")).join("  ") : "—"],
+          ["Rallies", String(m.rallies.length)],
+          ["Hits", String(m.events.filter((e) => e.type === "hit").length)],
+          ["Length", fmtTime(m.video.duration_s)],
+        ].map(([k, v]) => (
+          <div key={k} className="card px-4 py-3"><div className="label">{k}</div><div className="mt-1 font-mono text-xl font-semibold tabular-nums">{v}</div></div>
+        ))}
+      </div>
+
+      <nav className="sticky top-0 z-20 -mx-1 mb-4 flex gap-1 overflow-x-auto border-b border-border bg-bg px-1 py-2 backdrop-blur" aria-label="Match sections">
+        {[["replay", "Replay"], ["smart-court", "Smart Court"], ["top-down", "Top-down"], ["details", "Stats and events"]].map(([id, label]) => (
+          <a key={id} href={`#${id}`} className="whitespace-nowrap rounded-md px-3 py-1.5 text-sm text-muted hover:bg-fg/5 hover:text-fg">{label}</a>
+        ))}
+        <Link href={`/matches/${m.match_id}/report`} className="ml-auto whitespace-nowrap rounded-md px-3 py-1.5 text-sm text-accent hover:bg-fg/5">Coach report →</Link>
+      </nav>
+
       {!match.data?.mock && <AssignPlayers matchId={m.match_id} players={m.players} onSaved={match.reload} />}
 
       {m.highlight && <HighlightCard match={m} onWatchFull={goto} />}
 
       {/* Row 1: the replay and the result of the match */}
-      <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
+      <div id="replay" className="grid scroll-mt-14 items-start gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
         <div className="min-w-0 space-y-4">
           <VideoOverlay match={m} tracks={tr} lines={sport.court.lines} courtSize={sport.court} seek={seek}
             onTime={(t, f) => { setTime(t); setFrame(f); }} />
@@ -160,14 +178,14 @@ function MatchVision() {
       </div>
 
       {/* The Smart Court: the detected sport's 3D court, this match's shots and players, and the court's specifications, together */}
-      <div id="smart-court" className="mt-4 scroll-mt-4">
+      <div id="smart-court" className="mt-4 scroll-mt-14">
         <Card title="Smart Court (3D) and court specifications" actions={<SmartCourtLink />}>
           <MatchSmartCourt match={m} sport={sport} time={time} mock={match.data?.mock} />
         </Card>
       </div>
 
       {/* Row 2: where the players were, and how well the tracking worked */}
-      <div className="mt-4 grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
+      <div id="top-down" className="mt-4 grid scroll-mt-14 items-start gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
         {calibrated ? (
           <Card title="Top-down view (2D)" actions={
             <select className="input py-1 text-xs" value={heatMode} onChange={(e) => setHeatMode(e.target.value)}>
@@ -214,8 +232,8 @@ function MatchVision() {
         </div>
       </div>
 
-      <Card className="mt-4">
-        <div className="mb-4 flex gap-1 border-b border-border">
+      <Card className="mt-4 scroll-mt-14">
+        <div id="details" className="mb-4 flex scroll-mt-14 gap-1 border-b border-border">
           {(["stats", "shots", "events", "insights"] as Tab[]).map((t) => (
             <button key={t} onClick={() => setTab(t)}
               className={`-mb-px border-b-2 px-3 py-2 text-sm capitalize ${tab === t ? "border-accent font-medium" : "border-transparent text-muted"}`}>

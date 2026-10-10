@@ -9,7 +9,7 @@ import ManageMatches from "@/components/match/ManageMatches";
 export default function MatchesPage() {
   const matches = useApi(() => api.matches(), []);
   return (
-    <div className="mx-auto max-w-5xl">
+    <div className="mx-auto max-w-7xl">
       <PageHeader title="Matches" subtitle="Every processed match is a structured record with a SHA-256 fingerprint."
         actions={<Link href="/upload" className="btn-primary">Analyse a match</Link>} />
       <Card>
