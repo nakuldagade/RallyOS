@@ -1,0 +1,103 @@
+// Fetch wrapper for the RallyOS API. Base URL from NEXT_PUBLIC_API_URL.
+// NEXT_PUBLIC_USE_MOCK=true reads /mock/*.json; otherwise match + tracks fall back to the mock
+// when the backend is unreachable, so the demo never shows a blank page.
+import type {
+  Booking, CoachReport, CourtRow, DisputeDetail, DrawMatch, Health, MatchJSON, MatchSummary, Player,
+  Prediction, RatingPoint, Score, SportConfig, Suggestion, Tournament, Tracks,
+} from "./types";
+
+export const API = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000").replace(/\/$/, "");
+export const USE_MOCK = process.env.NEXT_PUBLIC_USE_MOCK === "true";
+
+export class ApiError extends Error {
+  constructor(public status: number, message: string) {
+    super(message);
+  }
+}
+
+export function mediaUrl(path?: string | null): string | null {
+  if (!path) return null;
+  return /^https?:\/\//.test(path) ? path : API + path;
+}
+
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  let res: Response;
+  try {
+    res = await fetch(API + path, { cache: "no-store", ...init });
+  } catch {
+    throw new ApiError(0, `Backend not reachable at ${API}. Start it with: uvicorn api.main:app --port 8000`);
+  }
+  if (!res.ok) {
+    let msg = `${res.status} ${res.statusText}`;
+    try {
+      const body = await res.json();
+      if (body?.detail) msg = typeof body.detail === "string" ? body.detail : JSON.stringify(body.detail);
+    } catch {
+      /* not JSON */
+    }
+    throw new ApiError(res.status, msg);
+  }
+  return res.json() as Promise<T>;
+}
+
+async function local<T>(path: string): Promise<T> {
+  const res = await fetch(path, { cache: "no-store" });
+  if (!res.ok) throw new ApiError(res.status, `mock file ${path} missing`);
+  return res.json() as Promise<T>;
+}
+
+export interface Sourced<T> {
+  data: T;
+  mock: boolean;
+}
+
+async function withMock<T>(live: () => Promise<T>, mockPath: string): Promise<Sourced<T>> {
+  if (USE_MOCK) return { data: await local<T>(mockPath), mock: true };
+  try {
+    return { data: await live(), mock: false };
+  } catch (e) {
+    if (e instanceof ApiError && e.status === 0) return { data: await local<T>(mockPath), mock: true };
+    throw e;
+  }
+}
+
+const post = (body?: unknown): RequestInit =>
+  body === undefined
+    ? { method: "POST" }
+    : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) };
+
+const q = encodeURIComponent;
+
+export const api = {
+  health: () => request<Health>("/health"),
+  matches: () => request<MatchSummary[]>("/v1/matches"),
+  match: (id: string) => withMock(() => request<MatchJSON>(`/v1/matches/${q(id)}`), "/mock/match.json"),
+  tracks: (id: string) => withMock(() => request<Tracks>(`/v1/matches/${q(id)}/tracks`), "/mock/tracks.json"),
+  report: (id: string, source = "auto") => request<CoachReport>(`/v1/matches/${q(id)}/report?source=${source}`),
+  confirmScore: (id: string, body: { games: number[][]; winner_track_id?: number | null }) =>
+    request<Score>(`/v1/matches/${q(id)}/score/confirm`, post(body)),
+  dispute: (id: string) => request<DisputeDetail>(`/v1/disputes/${q(id)}`),
+  players: () => request<Player[]>("/v1/players"),
+  player: (id: string) => request<Player>(`/v1/players/${q(id)}`),
+  trends: (id: string) => request<{ player_id: string; rating_history: RatingPoint[] }>(`/v1/players/${q(id)}/trends`),
+  matchmaking: (id: string, radiusKm = 25) => request<Suggestion[]>(`/v1/matchmaking?player_id=${q(id)}&radius_km=${radiusKm}`),
+  predict: (a: string, b: string) => request<Prediction>(`/v1/predict?a=${q(a)}&b=${q(b)}`),
+  courts: (near?: string) => request<CourtRow[]>(`/v1/courts${near ? `?near=${q(near)}` : ""}`),
+  book: (body: { court_id: number; player_id: string; slot_start: string; slot_end: string }) =>
+    request<Booking>("/v1/bookings", post(body)),
+  tournaments: () => request<Tournament[]>("/v1/tournaments"),
+  register: (tid: number, playerId: string) => request<unknown>(`/v1/tournaments/${tid}/register`, post({ player_id: playerId })),
+  draw: (tid: number) => request<DrawMatch[]>(`/v1/tournaments/${tid}/draw`, post()),
+  sports: () => request<SportConfig[]>("/v1/sports"),
+  sport: (name: string) => request<SportConfig>(`/v1/sports/${q(name)}`),
+  upload: (file: File, sport: string, opts: { taps?: [number, number][] | null; nearName?: string; farName?: string } = {}) => {
+    const fd = new FormData();
+    fd.append("video", file);
+    fd.append("sport", sport);
+    if (opts.taps) fd.append("taps", JSON.stringify(opts.taps));
+    if (opts.nearName) fd.append("near_name", opts.nearName);
+    if (opts.farName) fd.append("far_name", opts.farName);
+    return request<{ job_id: string }>("/v1/videos", { method: "POST", body: fd });
+  },
+  jobStreamUrl: (id: string) => `${API}/v1/jobs/${q(id)}`,
+};
