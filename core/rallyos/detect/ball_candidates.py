@@ -13,6 +13,8 @@ linker's physics check removes the extra noise. Thresholds are defined at 960 px
 
 from __future__ import annotations
 
+import threading
+
 import cv2
 import numpy as np
 
@@ -35,6 +37,8 @@ class BallCandidateDetector:
         self.scale = 1.0
         self._roi_small = None
         self._roi_src = None
+        self._roi_box = None
+        self._lock = threading.Lock()
 
     def prepare(self, frame_bgr: np.ndarray) -> np.ndarray:
         h, w = frame_bgr.shape[:2]
@@ -42,6 +46,24 @@ class BallCandidateDetector:
         small = cv2.resize(frame_bgr, (round(w * self.scale), round(h * self.scale)), interpolation=cv2.INTER_AREA) \
             if self.scale < 1 else frame_bgr
         return cv2.GaussianBlur(cv2.cvtColor(small, cv2.COLOR_BGR2GRAY), (3, 3), 0)
+
+    def roi_for(self, roi: np.ndarray, shape: tuple[int, int]) -> tuple[int, int, int, int]:
+        """Bounding box (x0, y0, x1, y1, in work pixels) of the search mask, cached; the mask is resized to the work size once.
+        Safe to call from several threads (candidates() runs on a pool)."""
+        with self._lock:
+            hh, ww = shape
+            if self._roi_small is None or self._roi_src is not roi or self._roi_small.shape != shape:
+                small = roi if roi.shape == shape else cv2.resize(roi, (ww, hh), interpolation=cv2.INTER_NEAREST)
+                ys, xs = np.nonzero(small)
+                # everything outside the mask is zero, so the whole search can run on the mask's bounding box (+ 2 px for the
+                # dilation): same result, a fraction of the pixels
+                if len(xs):
+                    self._roi_box = (max(0, int(xs.min()) - 2), max(0, int(ys.min()) - 2),
+                                     min(ww, int(xs.max()) + 3), min(hh, int(ys.max()) + 3))
+                else:
+                    self._roi_box = (0, 0, ww, hh)
+                self._roi_small, self._roi_src = small, roi
+            return self._roi_box
 
     def candidates(self, prev: np.ndarray, cur: np.ndarray, nxt: np.ndarray, player_boxes: list,
                    x_range: tuple[float, float] | None = None,
@@ -53,17 +75,18 @@ class BallCandidateDetector:
         s = self.scale
         hh, ww = cur.shape
         lin = ww / REF_WIDTH
-        motion = cv2.min(cv2.absdiff(cur, prev), cv2.absdiff(nxt, cur))
+        x0, y0, x1, y1 = self.roi_for(roi, (hh, ww)) if roi is not None else (0, 0, ww, hh)
+        c_prev, c_cur, c_nxt = prev[y0:y1, x0:x1], cur[y0:y1, x0:x1], nxt[y0:y1, x0:x1]
+        motion = cv2.min(cv2.absdiff(c_cur, c_prev), cv2.absdiff(c_nxt, c_cur))
         if roi is not None:
-            # motion outside the court and the air above it (crowd, screens) is dropped before the expensive
-            # connected-component step: faster, and it removes false candidates too
-            if self._roi_small is None or self._roi_src is not roi or self._roi_small.shape != motion.shape:
-                self._roi_small = roi if roi.shape == motion.shape else cv2.resize(roi, (ww, hh), interpolation=cv2.INTER_NEAREST)
-                self._roi_src = roi
-            motion = cv2.bitwise_and(motion, motion, mask=self._roi_small)
+            motion = cv2.bitwise_and(motion, motion, mask=self._roi_small[y0:y1, x0:x1])
         _, mask = cv2.threshold(motion, self.diff_thr, 255, cv2.THRESH_BINARY)
         mask = cv2.dilate(mask, np.ones((3, 3), np.uint8))
         n, _, stats, cents = cv2.connectedComponentsWithStats(mask, connectivity=8)
+        stats = stats.copy()
+        stats[:, 0] += x0
+        stats[:, 1] += y0
+        cents = cents + np.array([x0, y0], dtype=cents.dtype)                # back to full-frame work coordinates
 
         blocked = np.zeros((hh, ww), np.uint8)
         for i in range(1, n):                                   # large moving blobs = people
@@ -94,7 +117,7 @@ class BallCandidateDetector:
                 continue
             if roi is not None and not roi[min(roi.shape[0] - 1, int(oy)), min(roi.shape[1] - 1, int(ox))]:
                 continue
-            score = float(motion[y:y + h, x:x + w].mean()) * (0.5 + bright / 510.0)
+            score = float(motion[y - y0:y - y0 + h, x - x0:x - x0 + w].mean()) * (0.5 + bright / 510.0)
             out.append((round(float(ox), 1), round(float(oy), 1), round(score, 2)))
         out.sort(key=lambda c: -c[2])
         return out[: self.top_k]

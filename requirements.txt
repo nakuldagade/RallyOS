@@ -6,6 +6,7 @@ torchvision>=0.18
 # Vision core (installed as a package)
 -e ./core
 ultralytics>=8.3
+openvino>=2024.4      # optional: ~1.3x faster pose on CPU (RALLYOS_POSE_BACKEND=torch to turn it off); PyTorch is the fallback
 supervision>=0.25
 opencv-python>=4.10
 numpy>=1.26

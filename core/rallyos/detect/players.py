@@ -1,6 +1,7 @@
 """Players + pose from the pretrained YOLO11n-pose model (person class only, never fine-tuned).
 
 Backends, tried in order by load_pose_detector():
+  0. OpenVINO on CPU (the same weights, converted in memory; RALLYOS_POSE_BACKEND=torch turns it off)
   1. ultralytics + PyTorch (models/yolo11n-pose.pt)
   2. OpenCV DNN on an ONNX export of the same pretrained weights (models/yolo11n-pose.onnx), for machines
      where PyTorch can't load (e.g. Windows Application Control blocking its DLLs). Export it once on a
@@ -24,6 +25,7 @@ from __future__ import annotations
 
 import os
 import statistics
+import threading
 from pathlib import Path
 
 import numpy as np
@@ -62,6 +64,10 @@ class PoseDetector:
             _MODELS[path] = YOLO(path)
         self.model = _MODELS[path]
         self.device = get_device(device)
+        if os.environ.get("RALLYOS_TORCH_THREADS"):
+            import torch
+
+            torch.set_num_threads(int(os.environ["RALLYOS_TORCH_THREADS"]))
         self.imgsz = imgsz
         self.conf = conf
 
@@ -133,9 +139,79 @@ def decode_pose_output(raw: np.ndarray, r: float, px: float, py: float, conf: fl
     return out
 
 
+_OV_COMPILED: dict[tuple, object] = {}   # (weights, height, width) -> compiled OpenVINO model: a crop size is compiled once per process
+
+
+class OpenVinoPoseDetector:
+    """The same pretrained YOLO11n-pose weights, converted in memory to OpenVINO (no new weights, nothing trained) and run on
+    the CPU: about 1.3-1.5x faster than PyTorch for this model. A static input shape is compiled per crop size (the court
+    crop is the same size for a whole session), then every frame of that size reuses it. Output decoding is shared with the
+    ONNX backend."""
+
+    def __init__(self, imgsz: int = 1280, conf: float = 0.25, iou: float = 0.7):
+        import openvino as ov  # noqa: F401 - fail early (ImportError) when the runtime is not installed
+
+        self.weights = str(weights_path())
+        self.imgsz, self.conf, self.iou = imgsz, conf, iou
+        self.device = "cpu"
+        self._tls = threading.local()
+
+    def _compiled(self, h: int, w: int):
+        key = (self.weights, h, w)
+        if key not in _OV_COMPILED:
+            import openvino as ov
+            import torch
+            from ultralytics import YOLO
+
+            net = YOLO(self.weights).model.eval().fuse()
+            net.model[-1].export = True                       # raw (1, 56, N) tensor, as the ONNX export gives
+            example = torch.zeros(1, 3, h, w)
+            with torch.no_grad():
+                traced = torch.jit.trace(net, example, check_trace=False)
+            _OV_COMPILED[key] = ov.Core().compile_model(ov.convert_model(traced, example_input=example), "CPU",
+                                                       {"PERFORMANCE_HINT": "LATENCY"})
+        return _OV_COMPILED[key]
+
+    def _letterbox(self, img: np.ndarray) -> tuple[np.ndarray, float, float, float]:
+        import cv2
+
+        h, w = img.shape[:2]
+        r = min(self.imgsz / h, self.imgsz / w)
+        nw, nh = round(w * r), round(h * r)
+        W, H = -(-nw // 32) * 32, -(-nh // 32) * 32          # padded to the model's stride of 32
+        px, py = (W - nw) / 2, (H - nh) / 2
+        canvas = np.full((H, W, 3), 114, np.uint8)
+        top, left = int(round(py - 0.1)), int(round(px - 0.1))
+        canvas[top:top + nh, left:left + nw] = cv2.resize(img, (nw, nh), interpolation=cv2.INTER_LINEAR)
+        return canvas, r, px, py
+
+    def __call__(self, frame_bgr: np.ndarray) -> list[dict]:
+        import cv2
+
+        img, r, px, py = self._letterbox(frame_bgr)
+        blob = cv2.dnn.blobFromImage(img, 1 / 255.0, swapRB=True)
+        key = (img.shape[0], img.shape[1])
+        reqs = getattr(self._tls, "reqs", None)
+        if reqs is None:
+            reqs = self._tls.reqs = {}
+        if key not in reqs:                                   # one infer request per thread: a request cannot be entered twice
+            reqs[key] = self._compiled(*key).create_infer_request()
+        req = reqs[key]
+        req.infer({0: blob})
+        raw = np.array(req.get_output_tensor(0).data)
+        return decode_pose_output(raw, r, px, py, self.conf, self.iou)
+
+
 def load_pose_detector(device: str | None = None, imgsz: int = 1280) -> tuple[object | None, str]:
     """(detector, backend description). Detector is None when no backend can run on this machine."""
     reasons = []
+    # RALLYOS_POSE_BACKEND = auto | torch | openvino. auto: OpenVINO on a CPU run when it is installed (faster), else PyTorch.
+    want = os.environ.get("RALLYOS_POSE_BACKEND", "auto").strip().lower()
+    if want in ("auto", "openvino") and get_device(device) == "cpu":
+        try:
+            return OpenVinoPoseDetector(imgsz=imgsz), "yolo11n-pose (OpenVINO, CPU)"
+        except Exception as e:  # noqa: BLE001 - not installed or blocked: PyTorch is the fallback, and it is reported
+            reasons.append(f"OpenVINO unavailable ({str(e).splitlines()[0][:100]})")
     try:
         return PoseDetector(device=device, imgsz=imgsz), "yolo11n-pose (ultralytics/PyTorch)"
     except (ImportError, OSError) as e:                # OSError: e.g. torch DLL blocked by policy

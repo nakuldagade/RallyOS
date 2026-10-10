@@ -121,11 +121,36 @@ def scene_files(scene: Scene) -> tuple[dict, dict]:
 # per-frame scan: pose + shuttle candidates
 # ---------------------------------------------------------------------------------------------------------------
 
+_POOLS: dict[str, object] = {}
+
+
+def _pool(name: str, workers: int):
+    """Process-wide worker threads. Pose and the shuttle search spend their time inside torch / OpenVINO / OpenCV, which
+    release the GIL, so they run truly in parallel with each other and with the decoding on the main thread."""
+    if name not in _POOLS:
+        from concurrent.futures import ThreadPoolExecutor
+
+        _POOLS[name] = ThreadPoolExecutor(max(1, workers), thread_name_prefix=name)
+    return _POOLS[name]
+
+
+POSE_WORKERS = int(os.environ.get("RALLYOS_POSE_WORKERS") or 2)       # pose calls in flight at once
+SEARCH_WORKERS = int(os.environ.get("RALLYOS_SEARCH_WORKERS") or 3)   # shuttle searches in flight at once
+MAX_SEARCH_PENDING = 24
+
+
 class FrameScanner:
     """Feed frames in order; it keeps the pose samples and the shuttle candidates of every frame it has seen.
 
     State carried between calls (and so between live chunks): the 3-frame window, the last pose boxes (used to mask
     people out of the shuttle search) and the global frame counter that decides which frames get pose.
+
+    Three things run at once, with exactly the results of doing them one after the other:
+      * pose of the next pose frames runs on worker threads while the frames before them are searched for the shuttle
+        (each frame is masked with the people found on the pose frame at or before it, so a frame waits for that one result);
+      * the per-frame shuttle search (frame differences, connected components) is independent between frames and runs on a pool;
+      * the main thread only decodes and prepares frames.
+    `flush()` finishes everything still waiting; every reader of the results (`sampled`, `candidates()`, `skip()`) calls it first.
     """
 
     def __init__(self, scene: Scene, detector, stride: int = 3):
@@ -135,36 +160,81 @@ class FrameScanner:
         self.balls_det = BallCandidateDetector()
         self.window: deque = deque(maxlen=3)
         self.last_boxes: list = []
-        self.sampled: list[tuple[int, list[dict]]] = []     # (frame index, every person detected) on pose frames
-        self.cands: list[list] = []                          # per frame, best shuttle candidates
+        self._sampled: list[tuple[int, list[dict]]] = []    # (frame index, every person detected) on pose frames
+        self._cands: list = []                               # per frame, best shuttle candidates (or a future of them)
+        self._resolved = 0                                   # _cands[:_resolved] are plain lists
+        self._queue: deque = deque()                         # (frame index, frame, pose future or None), not yet searched
+        self._pose_fs: list[int] = []                        # pose frames in the queue, oldest first
         self.f = 0                                           # frames fed so far = index of the next frame
 
-    def feed(self, frame: np.ndarray) -> None:
+    @property
+    def sampled(self) -> list[tuple[int, list[dict]]]:
+        self.flush()
+        return self._sampled
+
+    def _pose(self, frame: np.ndarray) -> list[dict]:
         from rallyos.calibration import roi as court_roi
 
-        f, sc = self.f, self.scene
+        sc = self.scene
+        return court_roi.cropped(self.detector, frame, sc.pose_box) if sc.pose_box else self.detector(frame)
+
+    def feed(self, frame: np.ndarray) -> None:
+        f = self.f
+        job = None
         if self.detector is not None and f % self.stride == 0:
-            dets = court_roi.cropped(self.detector, frame, sc.pose_box) if sc.pose_box else self.detector(frame)
-            self.sampled.append((f, dets))
-            self.last_boxes = [d["bbox"] for d in dets]      # mask everyone (players and officials) for the shuttle search
-        self.window.append((self.balls_det.prepare(frame), self.last_boxes))
-        if len(self.window) == 3:
-            (g0, _), (g1, boxes), (g2, _) = self.window
-            self.cands.append(self.balls_det.candidates(g0, g1, g2, boxes, roi=sc.ball_mask))
-        elif f == 0:
-            self.cands.append([])
+            job = _pool("pose", POSE_WORKERS).submit(self._pose, frame)
+            self._pose_fs.append(f)
+        self._queue.append((f, frame, job))
         self.f += 1
+        ahead = max(1, POSE_WORKERS)
+        if job is not None and len(self._pose_fs) >= ahead:
+            self._drain(before=self._pose_fs[-ahead])        # the frames whose pose has had the longest to finish
+
+    def _drain(self, before: int | None = None) -> None:
+        while self._queue and (before is None or self._queue[0][0] < before):
+            f, frame, job = self._queue.popleft()
+            sc = self.scene
+            if job is not None:
+                dets = job.result()
+                self._pose_fs.remove(f)
+                self._sampled.append((f, dets))
+                self.last_boxes = [d["bbox"] for d in dets]  # mask everyone (players and officials) for the shuttle search
+            self.window.append((self.balls_det.prepare(frame), self.last_boxes))
+            if len(self.window) == 3:
+                (g0, _), (g1, boxes), (g2, _) = self.window
+                if sc.ball_mask is not None:
+                    self.balls_det.roi_for(sc.ball_mask, g1.shape)    # resolve the mask once, before the threads need it
+                self._cands.append(_pool("search", SEARCH_WORKERS).submit(self.balls_det.candidates, g0, g1, g2, boxes, roi=sc.ball_mask))
+                self._settle(keep=MAX_SEARCH_PENDING)
+            elif f == 0:
+                self._cands.append([])
+
+    def _settle(self, keep: int = 0) -> None:
+        """Turn finished futures into lists, oldest first, leaving at most `keep` unresolved (bounds the frames held in memory)."""
+        while self._resolved < len(self._cands) - keep:
+            c = self._cands[self._resolved]
+            if hasattr(c, "result"):
+                self._cands[self._resolved] = c.result()
+            self._resolved += 1
+
+    def flush(self) -> None:
+        """Finish every frame still waiting for its pose result and every shuttle search still running."""
+        self._drain()
+        self._settle()
 
     def skip(self, n: int = 1) -> None:
         """Frames that never arrived (dropped): keep indices aligned with empty entries and a broken window."""
+        self.flush()
         for _ in range(n):
             self.window.clear()
-            self.cands.append([])
+            self._cands.append([])
             self.f += 1
+        self._settle()
 
     def candidates(self) -> list[list]:
         """Per-frame candidates for all frames fed so far; the newest frame has no successor yet, so it is empty."""
-        out = list(self.cands)
+        self.flush()
+        out = list(self._cands)
         while len(out) < self.f:
             out.append([])
         return out[: self.f]
@@ -302,7 +372,7 @@ def resolve_outcome(scene: Scene, rallies: list[dict], hits: list[dict], balls: 
 # movement analytics and per-player stats
 # ---------------------------------------------------------------------------------------------------------------
 
-def movement_analytics(scene: Scene, frames: list[dict], events: list[dict], rallies: list[dict], *, stride: int,
+def movement_analytics(scene: Scene, frames: list[dict], events: list[dict], rallies: list[dict], *, stride: int, pose_frames: set | None = None,
                        names: dict[int, str], shot_summary, n_frames: int, video=None, detector=None, device=None,
                        emit: Callable[[str, float, str | None], None] | None = None, split_step: bool = True):
     """(per_player, players_meta, split_note). Return to base, split-step (needs `video` and a pose model), fatigue."""
@@ -318,7 +388,7 @@ def movement_analytics(scene: Scene, frames: list[dict], events: list[dict], ral
     side_of = {1: "near", 2: "far"}
     hit_events = sorted((e for e in events if e["type"] == "hit"), key=lambda e: e["t"])
     track_pts: dict[int, list] = {}
-    seen = [(fr["f"] / fps, fr["players"]) for fr in frames if fr["f"] % stride == 0]
+    seen = [(fr["f"] / fps, fr["players"]) for fr in frames if (fr["f"] in pose_frames if pose_frames is not None else fr["f"] % stride == 0)]
     for tid in (1, 2):
         track_pts[tid] = [(t, tuple(p["court"])) for t, ps in seen for p in ps if p["track_id"] == tid and p.get("court")]
 

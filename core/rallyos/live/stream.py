@@ -29,6 +29,10 @@ import numpy as np
 from rallyos import stages
 from rallyos.live.segments import ChunkMeta, StableIds, dedupe_times, stitch
 
+POSE_INTERVAL_S = 0.12      # seconds between pose samples (about 8 per second)
+ADAPT_UP = 0.9             # a chunk that takes more than this share of its length makes pose rarer
+ADAPT_DOWN = 0.6           # ...and one under this share lets it recover
+MAX_ADAPT_STEPS = 3        # at most base + 6 frames between pose samples
 PAUSE_S = 4.0              # the rally-closing pause (events/rallies.py splits rallies on gaps longer than this)
 WINDOW_MIN_S = 6.0         # the tail window is never shorter than this
 FREEZE_MARGIN_S = 2.0      # a frozen boundary stays this far before the first hit of the open rally
@@ -56,6 +60,35 @@ def _pts_fps(path) -> float:
     return float(min(120.0, max(5.0, round(fps))))
 
 
+def pose_stride_for(fps: float, minimum: int = 3) -> int:
+    """Frames between pose samples so that a sample comes about every POSE_INTERVAL_S: 3 at 25 fps, 4 at 30, 7 at 60."""
+    return max(minimum, round(fps * POSE_INTERVAL_S))
+
+
+class _AudioJob:
+    """Decode a chunk's audio track on a worker thread (an ffmpeg process: about a second of mostly waiting on Windows), so it
+    overlaps the frame loop instead of adding to it. `result()` joins and returns what `load_audio` returned."""
+
+    def __init__(self, path):
+        import threading
+
+        self._out: tuple = (None, "audio not loaded")
+        self._t = threading.Thread(target=self._run, args=(str(path),), daemon=True)
+        self._t.start()
+
+    def _run(self, path: str) -> None:
+        from rallyos.audio.onsets import load_audio
+
+        try:
+            self._out = load_audio(path)
+        except Exception as exc:                                  # noqa: BLE001 - audio is optional: report, never fail the chunk
+            self._out = (None, f"audio failed: {exc}")
+
+    def result(self) -> tuple:
+        self._t.join()
+        return self._out
+
+
 class StreamAnalyzer:
     def __init__(self, sport: str = "auto", device: str | None = None, taps: list | None = None,
                  names: dict[int, str] | None = None, session_id: str | None = None, out_dir: str | Path | None = None,
@@ -69,7 +102,9 @@ class StreamAnalyzer:
         self.names = {1: "Near player", 2: "Far player", **(names or {})}
         self.session_id = session_id or f"s_{int(time.time())}"
         self.out_dir = Path(out_dir) if out_dir else Path("demo/out/live") / self.session_id
-        self.stride = max(1, stride)
+        self.stride_arg = max(1, stride)
+        self._slow_streak = 0
+        self.stride = self.base_stride = self.stride_arg
         self.imgsz = imgsz or int(os.environ.get("RALLYOS_MAX_WIDTH") or 1280)
         self.chunk_seconds = chunk_seconds
         self.auto_calibrate = auto_calibrate
@@ -130,6 +165,7 @@ class StreamAnalyzer:
             cap.release()
             cap = cv2.VideoCapture(str(path))
         first_g = self.scanner.f
+        audio_job = _AudioJob(meta.path)                              # ffmpeg runs while the frames are analysed
         processed = skipped = 0
         i = 0
         pos0 = 0.0
@@ -161,16 +197,17 @@ class StreamAnalyzer:
         self.chunk_files.append(meta)
         self.processed_until = max(self.processed_until, meta.t0 + i / fps_c)
 
-        self._ingest_audio(meta)
+        self._ingest_audio(meta, audio_job.result())
         self._refresh_tracks(len(self.chunks_done))
         result = self._analyse_window()
         positions = self._positions(first_g, self.scanner.f)
         process_s = time.time() - started
         info = {"seq": seq, "t0": round(meta.t0, 2), "t1": round(meta.t1, 2), "process_s": round(process_s, 2),
                 "frames": processed, "overlap_frames_skipped": skipped, "dropped_frames": self.dropped_frames,
-                "rtf": round(process_s / max(1e-6, processed / self.fps), 2), "reduced_quality": False,
+                "rtf": round(process_s / max(1e-6, processed / self.fps), 2), "reduced_quality": self.stride > self.base_stride, "pose_stride": self.stride,
                 "latency_s": round(time.time() - t_ready, 2) if t_ready else None}
         self.chunks_done.append(info)
+        self._adapt(process_s, meta.duration or self.chunk_seconds)
         out = {**info, "positions": positions, **result, "calibration": self.calibration_status()}
         self._write_chunk(seq, out)
         return out
@@ -201,6 +238,9 @@ class StreamAnalyzer:
         self.scene = scene
         self.calibration_quality = self._quality(scene)
         self.detector, self.pose_backend = load_pose_detector(device=self.device, imgsz=self.imgsz)
+        # pose every ~0.12 s whatever the frame rate (a 60 fps phone does not need 2.4x the pose work of a 25 fps clip)
+        self.base_stride = pose_stride_for(self.fps, self.stride_arg)
+        self.stride = self.base_stride
         self.scanner = stages.FrameScanner(scene, self.detector, self.stride)
         self.tracker = stages.PlayerTracker(scene)
 
@@ -245,11 +285,27 @@ class StreamAnalyzer:
         return [self.feed_chunk(c.path, c.seq, c.t0, c.duration, c.t_ready) for c in files]
 
     # -- per-chunk steps ---------------------------------------------------------------------------------------
-    def _ingest_audio(self, meta: ChunkMeta) -> None:
+    def _adapt(self, process_s: float, chunk_len: float) -> None:
+        """Graceful degradation: when chunks keep taking nearly as long as they last, run pose less often (the shuttle search
+        and the hit detection are untouched); when there is room again, go back. Everything produced at a reduced rate is
+        flagged. The first chunk is ignored (court search, model compile: one-time costs) and one slow chunk is not enough."""
+        if len(self.chunks_done) <= 1:
+            return
+        ratio = process_s / max(1e-6, chunk_len)
+        self._slow_streak = self._slow_streak + 1 if ratio > ADAPT_UP else 0
+        if self._slow_streak >= 2:
+            self.stride = min(self.stride + 2, self.base_stride + 2 * MAX_ADAPT_STEPS)
+            self._slow_streak = 0
+        elif ratio < ADAPT_DOWN and self.stride > self.base_stride:
+            self.stride = max(self.base_stride, self.stride - 2)
+        if self.scanner is not None:
+            self.scanner.stride = self.stride
+
+    def _ingest_audio(self, meta: ChunkMeta, loaded: tuple | None = None) -> None:
         from rallyos.audio.onsets import detect_onsets, load_audio
 
         acfg = self.scene.cfg.get("audio", {})
-        samples, status = load_audio(meta.path)
+        samples, status = loaded if loaded is not None else load_audio(meta.path)
         if status == "ok" or self.audio_status in ("no chunks yet",):
             self.audio_status = status
         if samples is None:
@@ -319,7 +375,7 @@ class StreamAnalyzer:
         self.speed_summary, self.shot_summary = speed_sum, shot_sum
         # 4. per-player stats (the heavy split-step pass waits for finalize)
         self.per_player, _meta, _note = stages.movement_analytics(
-            sc, frames, all_events, all_rallies, stride=self.stride, names=self.names, shot_summary=shot_sum, n_frames=n,
+            sc, frames, all_events, all_rallies, stride=self.stride, pose_frames=set(self.tracker.roles_at), names=self.names, shot_summary=shot_sum, n_frames=n,
             video=None, detector=None, split_step=False)
         # 5. move the freeze boundary forward, never into the open rally
         open_first = min((e["t"] for e in open_events if e["type"] == "hit"), default=None)
@@ -401,7 +457,7 @@ class StreamAnalyzer:
         events, landings, disputes, score, speed_summary, shot_summary = stages.resolve_outcome(
             sc, rallies, hits, balls, frames, events, video=video if render_clips else None, out=out, match_id=match_id)
         per_player, players_meta, split_note = stages.movement_analytics(
-            sc, frames, events, rallies, stride=self.stride, names=self.names, shot_summary=shot_summary, n_frames=n,
+            sc, frames, events, rallies, stride=self.stride, pose_frames=set(self.tracker.roles_at), names=self.names, shot_summary=shot_summary, n_frames=n,
             video=video, detector=self.detector, device=self.device, split_step=split_step)
         lat = [c["latency_s"] for c in self.chunks_done if c.get("latency_s") is not None]
         live = {"session_id": self.session_id, "chunk_seconds": self.chunk_seconds, "chunks": len(chunks),
@@ -429,7 +485,7 @@ class StreamAnalyzer:
     # -- persistence -------------------------------------------------------------------------------------------
     def _write_session(self) -> None:
         data = {"session_id": self.session_id, "sport": self.sport_arg, "sport_given": self.sport_given, "taps": self.taps_arg,
-                "chunk_seconds": self.chunk_seconds, "stride": self.stride, "chunks": [c.to_json() for c in self.chunk_files]}
+                "chunk_seconds": self.chunk_seconds, "stride": self.stride_arg, "chunks": [c.to_json() for c in self.chunk_files]}
         (self.out_dir / "session.json").write_text(json.dumps(data, indent=1), encoding="utf-8")
 
     def _write_chunk(self, seq: int, result: dict) -> None:

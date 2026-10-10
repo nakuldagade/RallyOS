@@ -133,7 +133,8 @@ def test_every_frame_is_analysed_exactly_once_across_overlapping_chunks(shared):
     assert results[0]["overlap_frames_skipped"] == 0
     assert all(r["overlap_frames_skipped"] == 10 for r in results[1:-1])      # the 0.4 s overlap is recognised by time
     assert sum(r["frames"] for r in results) == N and an.dropped_frames == 0
-    assert len(an.scanner.cands) == N - 1 and len(an.tracker.frames) == N
+    an.scanner.flush()
+    assert len(an.scanner._cands) == N - 1 and len(an.tracker.frames) == N
 
 
 def test_chunked_and_whole_file_runs_find_the_same_hits_rallies_and_court(shared):

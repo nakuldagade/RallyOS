@@ -33,6 +33,7 @@ def env(tmp_path_factory):
     mp.setattr(settings, "live_dir", base / "live")
     mp.setattr(settings, "out_dir", base / "out")
     mp.setattr(settings, "live_missing_wait_s", 1.0)
+    mp.setattr(settings, "storage", "local")            # the tests must not depend on what .env says (it may select Cloudinary)
     metas = make_chunks(base / "chunks", n=N_FRAMES)
     seed()
     with TestClient(app) as client:

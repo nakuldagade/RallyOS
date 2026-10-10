@@ -68,3 +68,9 @@ pass, dispute clips and the full-video checks). The status section of AGENTS.md 
   sequence number the client sent so the worker waits for chunks still in flight. A fresh server pays 20-40 s on its first
   chunk (cold PyTorch import and model load): the server now warms up in the background at start.
   `python -m api.live_client` behaves like the browser against a running server.
+* **Phase F:** pose was not the only cost: per 5.5 s chunk about 3.5 s pose, 2.5 s shuttle search, 0.9 s starting ffmpeg for the audio
+  and 0.6 s decoding, all in a row. Running them side by side (pose and shuttle search on threads, audio on a thread) with exactly
+  the same results, plus OpenVINO for pose, took a warm chunk from 7.7 s to 3.7 s and the lag from a growing 35 s to a constant
+  3.3-4.5 s. The 0.6 real-time target is still missed by 0.1; what is left is pose (about 2.7 s of CPU per chunk) on a laptop that
+  is also running other programs. The pose rate follows time, not frames (every ~0.12 s), and drops by itself, flagged, when the
+  analysis keeps falling behind.

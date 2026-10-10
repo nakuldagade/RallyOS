@@ -38,7 +38,7 @@ def run(clip: str, api: str = "http://localhost:8000", sport: str = "auto", taps
                     ev = json.loads(line[6:])
                     events.append({**ev, "_seen": time.time()})
                     if ev["type"] == "chunk_processed":
-                        log(f"  chunk {ev['seq']:2d} analysed in {ev['process_s']:5.2f} s, lag {ev['lag_s']:5.2f} s, latency {ev['latency_s']:5.2f} s")
+                        log(f"  chunk {ev['seq']:2d} analysed in {ev['process_s']:5.2f} s, lag {ev['lag_s']:5.2f} s, latency {ev['latency_s']:5.2f} s{'  [pose rate reduced]' if ev.get('reduced_quality') else ''}")
                     elif ev["type"] in ("chunk_missing", "chunk_failed", "error", "finalising"):
                         log(f"  {ev['type']} {ev.get('seq', '')} {ev.get('message', '')}")
                     if ev["type"] in ("finalised", "error"):
