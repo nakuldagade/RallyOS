@@ -27,12 +27,13 @@ TOURNAMENTS = [{"name": "Mumbai District Open", "sport": "badminton", "start_dat
 
 
 DEMO_PASSWORD = "rallyos-demo"          # demo accounts only: change it, or register your own, before showing real data
-COACHES = [{"email": "coach.vikram@rallyos.demo", "name": "Coach Vikram", "roster": ["p_anika", "p_rohan", "p_kabir"]},
-           {"email": "coach.neha@rallyos.demo", "name": "Coach Neha", "roster": ["p_meera", "p_isha"]}]
+COACHES = [{"email": "coach.vikram@rallyos.demo", "name": "Coach Vikram",
+            "roster": ["p_anika", "p_rohan", "p_meera", "p_kabir", "p_isha"]}]       # the one demo coach has every seed player
+RETIRED = ["coach.neha@rallyos.demo"]            # an earlier second demo coach: removed from a database that still has it
 
 
 def seed_accounts(s: Session) -> list[str]:
-    """A login for every seed player (first-name@rallyos.demo) and two coaches with different rosters. Idempotent."""
+    """A login for every seed player (first-name@rallyos.demo) and one coach who has every player on the roster. Idempotent."""
     made = []
     for p in s.exec(select(Player)).all():
         email = f"{p.name.lower()}@rallyos.demo"
@@ -45,16 +46,28 @@ def seed_accounts(s: Session) -> list[str]:
         p.user_id = u.id
         s.add(p)
         made.append(email)
+    for email in RETIRED:
+        old = s.exec(select(User).where(User.email == email)).first()
+        if old is not None:
+            for r in s.exec(select(CoachPlayer).where(CoachPlayer.coach_user_id == old.id)).all():
+                s.delete(r)
+            cred = s.get(Credential, old.id)
+            if cred is not None:
+                s.delete(cred)
+            s.delete(old)
+            s.flush()
     for c in COACHES:
-        if s.exec(select(User).where(User.email == c["email"])).first():
-            continue
-        u = User(email=c["email"], name=c["name"], role="coach")
-        s.add(u)
-        s.flush()
-        s.add(Credential(user_id=u.id, password_hash=auth.hash_password(DEMO_PASSWORD)))
-        for pid in c["roster"]:
-            s.add(CoachPlayer(coach_user_id=u.id, player_id=pid))
-        made.append(c["email"])
+        u = s.exec(select(User).where(User.email == c["email"])).first()
+        if u is None:
+            u = User(email=c["email"], name=c["name"], role="coach")
+            s.add(u)
+            s.flush()
+            s.add(Credential(user_id=u.id, password_hash=auth.hash_password(DEMO_PASSWORD)))
+            made.append(c["email"])
+        have = {r.player_id for r in s.exec(select(CoachPlayer).where(CoachPlayer.coach_user_id == u.id)).all()}
+        for pid in c["roster"]:                                  # an existing coach gets any player still missing from the roster
+            if pid not in have and s.get(Player, pid):
+                s.add(CoachPlayer(coach_user_id=u.id, player_id=pid))
     s.commit()
     return made
 

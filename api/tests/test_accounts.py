@@ -27,6 +27,17 @@ def client():
         yield c
 
 
+OTHER = {"email": "other.coach@example.com", "password": "longenough1"}
+
+
+def other_coach(client):
+    """A second coach with an empty roster, made by registering (the demo database has only one coach)."""
+    r = client.post("/v1/auth/register", json={"name": "Other Coach", **OTHER, "role": "coach"})
+    if r.status_code == 409:
+        r = client.post("/v1/auth/login", json={**OTHER, "role": "coach"})
+    return {"Authorization": f"Bearer {r.json()['token']}"}
+
+
 def login(client, email, role=None, password=DEMO_PASSWORD):
     r = client.post("/v1/auth/login", json={"email": email, "password": password, **({"role": role} if role else {})})
     return r
@@ -133,9 +144,10 @@ def test_a_player_sees_only_their_own_analysis_and_a_coach_only_their_roster(cli
     anika, rohan = headers(client, "anika@rallyos.demo"), headers(client, "rohan@rallyos.demo")
     assert client.get("/v1/players/p_anika/analysis", headers=anika).status_code == 200
     assert client.get("/v1/players/p_anika/analysis", headers=rohan).status_code == 403
-    vikram, neha = headers(client, "coach.vikram@rallyos.demo"), headers(client, "coach.neha@rallyos.demo")
-    assert client.get("/v1/players/p_anika/analysis", headers=vikram).status_code == 200            # on Vikram's roster
-    assert client.get("/v1/players/p_anika/analysis", headers=neha).status_code == 403              # on Neha's roster: no
+    vikram, other = headers(client, "coach.vikram@rallyos.demo"), other_coach(client)
+    assert client.get("/v1/players/p_anika/analysis", headers=vikram).status_code == 200            # the demo coach has every player
+    assert client.get("/v1/players/p_meera/analysis", headers=vikram).status_code == 200
+    assert client.get("/v1/players/p_anika/analysis", headers=other).status_code == 403             # a coach who did not add her: no
     assert client.get("/v1/players/p_nobody/analysis", headers=vikram).status_code == 403
 
 
@@ -218,19 +230,36 @@ def test_two_players_have_different_histories(client, matches):
 
 # -- the coach dashboard ----------------------------------------------------------------------------------------------------------
 
+def test_there_is_one_demo_coach_with_every_player_and_an_old_second_coach_is_removed(client):
+    from sqlmodel import select
+    from api.models import CoachPlayer, User
+
+    with Session(engine) as s:
+        old = User(email="coach.neha@rallyos.demo", name="Coach Neha", role="coach")      # a database from before: it still has her
+        s.add(old)
+        s.commit()
+        s.add(CoachPlayer(coach_user_id=old.id, player_id="p_meera"))
+        s.commit()
+    seed()
+    with Session(engine) as s:
+        coaches = [u.email for u in s.exec(select(User).where(User.role == "coach", User.email.like("%@rallyos.demo"))).all()]
+        assert coaches == ["coach.vikram@rallyos.demo"]
+        roster = {r.player_id for r in s.exec(select(CoachPlayer)).all() if r.coach_user_id == s.exec(select(User).where(User.email == coaches[0])).first().id}
+        assert roster == {"p_anika", "p_rohan", "p_meera", "p_kabir", "p_isha"}
+
+
 def test_the_coach_dashboard_lists_the_roster_with_what_changed(client, matches):
     d = client.get("/v1/coach/dashboard", headers=headers(client, "coach.vikram@rallyos.demo")).json()
-    assert {p["player_id"] for p in d["players"]} == {"p_anika", "p_rohan", "p_kabir"}
+    assert {p["player_id"] for p in d["players"]} == {"p_anika", "p_rohan", "p_meera", "p_kabir", "p_isha"}
     anika = next(p for p in d["players"] if p["player_id"] == "p_anika")
     assert anika["matches"] == 3 and anika["latest"]["match_id"] == "m_acct_c" and anika["improving"] and anika["rating_is_sample"] is True
     rohan = next(p for p in d["players"] if p["player_id"] == "p_rohan")
     assert rohan["matches"] == 2 and any(a["metric"] == "avg_return_to_base_s" for a in rohan["attention"])    # Rohan's return got slower
-    neha = client.get("/v1/coach/dashboard", headers=headers(client, "coach.neha@rallyos.demo")).json()
-    assert {p["player_id"] for p in neha["players"]} == {"p_meera", "p_isha"}
+    assert client.get("/v1/coach/dashboard", headers=other_coach(client)).json()["players"] == []         # another coach sees none of them
 
 
 def test_a_coach_manages_their_roster(client):
-    h = headers(client, "coach.neha@rallyos.demo")
+    h = other_coach(client)
     assert client.post("/v1/coach/roster", json={"player_id": "p_kabir"}, headers=h).status_code == 201
     assert client.get("/v1/players/p_kabir/analysis", headers=h).status_code == 200
     assert client.delete("/v1/coach/roster/p_kabir", headers=h).status_code == 200

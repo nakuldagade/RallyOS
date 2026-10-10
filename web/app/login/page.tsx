@@ -76,7 +76,7 @@ export default function LoginPage() {
         </form>
         <div className="mt-4 rounded-lg bg-fg/5 p-3 text-xs text-muted">
           Demo accounts (password <code>rallyos-demo</code>): <button type="button" className="text-accent" onClick={() => { setMode("login"); setEmail(COPY[role].email); setPassword("rallyos-demo"); }}>
-            fill in {COPY[role].email}</button>. Players: anika, rohan, meera, kabir, isha @rallyos.demo. Coaches: coach.vikram (Anika, Rohan, Kabir) and coach.neha (Meera, Isha) @rallyos.demo.
+            fill in {COPY[role].email}</button>. Players: anika, rohan, meera, kabir, isha @rallyos.demo. Coach: coach.vikram@rallyos.demo (has all five players on the roster).
         </div>
       </Card>
     </div>
