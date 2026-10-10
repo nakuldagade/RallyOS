@@ -1,0 +1,72 @@
+[
+  {
+    "id": "p_anika",
+    "name": "Anika",
+    "rating": 1620,
+    "rd": 80,
+    "style_vec": [
+      0.8,
+      0.5,
+      0.6,
+      0.7
+    ],
+    "lat": 19.2,
+    "lng": 72.97
+  },
+  {
+    "id": "p_rohan",
+    "name": "Rohan",
+    "rating": 1585,
+    "rd": 95,
+    "style_vec": [
+      0.6,
+      0.7,
+      0.5,
+      0.6
+    ],
+    "lat": 19.07,
+    "lng": 72.88
+  },
+  {
+    "id": "p_meera",
+    "name": "Meera",
+    "rating": 1490,
+    "rd": 120,
+    "style_vec": [
+      0.4,
+      0.8,
+      0.7,
+      0.5
+    ],
+    "lat": 19.12,
+    "lng": 72.85
+  },
+  {
+    "id": "p_kabir",
+    "name": "Kabir",
+    "rating": 1710,
+    "rd": 70,
+    "style_vec": [
+      0.9,
+      0.4,
+      0.5,
+      0.8
+    ],
+    "lat": 19.03,
+    "lng": 72.86
+  },
+  {
+    "id": "p_isha",
+    "name": "Isha",
+    "rating": 1555,
+    "rd": 110,
+    "style_vec": [
+      0.5,
+      0.6,
+      0.8,
+      0.6
+    ],
+    "lat": 19.22,
+    "lng": 73.0
+  }
+]

@@ -7,6 +7,7 @@ Usage (once implemented):
 from __future__ import annotations
 
 import argparse
+from typing import Callable
 
 from rallyos.device import get_device
 
@@ -16,7 +17,10 @@ class Analyzer:
         self.sport = sport
         self.device = get_device(device)
 
-    def run(self, video_path: str):
+    def run(self, video_path: str, out_dir: str | None = None,
+            progress: Callable[[str, float], None] | None = None) -> str:
+        """Process a clip, writing each stage's output (and finally match.json) into out_dir.
+        progress(stage, fraction) is called as stages finish. Returns out_dir."""
         raise NotImplementedError("pipeline stages land in §12 hours 1-8")
 
 
@@ -28,7 +32,7 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--out", default=None)
     ap.add_argument("--max-width", type=int, default=None)
     args = ap.parse_args(argv)
-    Analyzer(sport=args.sport, device=args.device).run(args.video)
+    Analyzer(sport=args.sport, device=args.device).run(args.video, out_dir=args.out)
 
 
 if __name__ == "__main__":

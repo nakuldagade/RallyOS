@@ -2,6 +2,7 @@
 demo/**/*.mp4
 demo/out/
 media/
+data/runtime/
 third_party/
 
 # Model weights (downloaded pretrained only)

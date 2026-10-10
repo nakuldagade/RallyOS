@@ -1,46 +1,32 @@
-"""FastAPI app. Until the real pipeline exists, GET /v1/matches/{id} serves data/mock/match.json.
+"""FastAPI app.  Run from the repo root:  uvicorn api.main:app --reload --port 8000   (docs: /docs)"""
+from contextlib import asynccontextmanager
 
-    uvicorn api.main:app --reload --port 8000     # docs at http://localhost:8000/docs
-"""
-
-from __future__ import annotations
-
-import json
-from pathlib import Path
-
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
-from rallyos import list_sports, load_sport
+from api.config import settings
+from api.db import create_all
+from api.routers import (calibrate, coach, courts, disputes, matches, network, players, sports,
+                         tournaments, videos)
 
-ROOT = Path(__file__).resolve().parents[1]
-MOCK_MATCH = ROOT / "data" / "mock" / "match.json"
 
-app = FastAPI(title="RallyOS API", version="0.1.0")
-app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:3000"], allow_methods=["*"], allow_headers=["*"])
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    create_all()
+    yield
+
+
+app = FastAPI(title="RallyOS API", version="1.0", lifespan=lifespan)
+app.add_middleware(CORSMiddleware, allow_origins=settings.cors_origins, allow_methods=["*"], allow_headers=["*"])
+
+for r in (calibrate, videos, matches, disputes, players, coach, network, courts, tournaments, sports):
+    app.include_router(r.router, prefix="/v1")
+
+app.mount("/media", StaticFiles(directory=str(settings.media_dir)), name="media")
 
 
 @app.get("/health")
-def health() -> dict:
-    return {"ok": True}
-
-
-@app.get("/v1/sports")
-def sports() -> list[dict]:
-    return [{"sport": s, "display_name": load_sport(s).get("display_name", s)} for s in list_sports()]
-
-
-@app.get("/v1/sports/{name}")
-def sport(name: str) -> dict:
-    try:
-        return load_sport(name)
-    except KeyError:
-        raise HTTPException(404, f"unknown sport {name!r}") from None
-
-
-@app.get("/v1/matches/{match_id}")
-def match(match_id: str) -> dict:
-    data = json.loads(MOCK_MATCH.read_text(encoding="utf-8"))
-    if match_id != data["match_id"]:
-        raise HTTPException(404, f"match {match_id!r} not found")
-    return data
+def health():
+    return {"ok": True, "mock_fallback": settings.mock_fallback, "coach": "claude" if settings.anthropic_key else "template",
+            "worker": bool(settings.worker_url)}
