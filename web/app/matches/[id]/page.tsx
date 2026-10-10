@@ -24,6 +24,7 @@ import AudioCard from "@/components/match/AudioCard";
 import BallTrackingCard from "@/components/match/BallTrackingCard";
 import AssignPlayers from "@/components/match/AssignPlayers";
 import HighlightCard from "@/components/match/HighlightCard";
+import MatchSummaryBot from "@/components/match/MatchSummaryBot";
 import MatchSmartCourt, { SmartCourtLink } from "@/components/match/MatchSmartCourt";
 
 type Tab = "stats" | "shots" | "events" | "insights";
@@ -129,6 +130,8 @@ function MatchVision() {
         ))}
         <Link href={`/matches/${m.match_id}/report`} className="ml-auto whitespace-nowrap rounded-md px-3 py-1.5 text-sm text-accent hover:bg-fg/5">Coach report →</Link>
       </nav>
+
+      {!match.data?.mock && <div className="mb-4"><MatchSummaryBot matchId={m.match_id} /></div>}
 
       {!match.data?.mock && <AssignPlayers matchId={m.match_id} players={m.players} onSaved={match.reload} />}
 

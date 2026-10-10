@@ -47,3 +47,9 @@ def test_every_number_in_a_template_answer_is_in_the_facts(client, matches):
     for q in ("Am I improving?", "What should I improve?", "best", "position", "shots"):
         text = player_chat.template_answer(q, f)
         assert coach.numbers_grounded(text, f), text
+
+
+def test_a_match_gets_a_summary_from_its_own_stats(client, matches):
+    r = client.get("/v1/matches/m_001/summary")
+    assert r.status_code == 200 and r.json()["summary"] and r.json()["source"] == "template"
+    assert client.get("/v1/matches/nope/summary").status_code == 404
