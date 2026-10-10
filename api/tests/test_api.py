@@ -170,3 +170,57 @@ def test_calibrate_with_taps_blank_frame_and_bad_input(client):
     assert client.post("/v1/calibrate", files={"frame": ("f.jpg", blank, "image/jpeg")}, data={"taps": "[[1,1]]"}).status_code == 400
     assert client.post("/v1/calibrate", files={"frame": ("f.jpg", b"not an image", "image/jpeg")}).status_code == 400
     assert client.post("/v1/calibrate", files={"frame": ("f.jpg", blank, "image/jpeg")}, data={"sport": "curling"}).status_code == 404
+
+
+def test_reimport_replaces_rows_children_first(client):
+    """Importing the same match twice must delete disputes before the events they point at (Postgres enforces it)."""
+    from sqlmodel import Session, select
+
+    from api.config import settings
+    from api.db import engine
+    from api.models import Dispute, Event, Rally
+    from api.services.importer import import_folder
+
+    with Session(engine) as s:
+        for _ in range(2):
+            assert import_folder(settings.mock_dir, s) == "m_001"
+        assert len(s.exec(select(Dispute).where(Dispute.match_id == "m_001")).all()) >= 1
+        rallies = s.exec(select(Rally.id).where(Rally.match_id == "m_001")).all()
+        assert rallies and len(s.exec(select(Event).where(Event.rally_id.in_(rallies))).all()) >= 2
+
+
+def test_migrate_copies_every_table_and_keeps_ids_growing(tmp_path):
+    from sqlalchemy import create_engine, func, select
+    from sqlmodel import Session, SQLModel
+
+    import os
+
+    from api.migrate_db import migrate
+    from api.models import Venue
+
+    dst = f"sqlite:///{(tmp_path / 'copy.db').as_posix()}"
+    src = os.environ["DATABASE_URL"]                              # the database the tests run on
+    counts = migrate(src, dst)
+    assert counts["venue"] >= 1 and counts["player"] >= 1 and set(counts) == {t.name for t in SQLModel.metadata.sorted_tables}
+    with Session(create_engine(dst)) as s:
+        top = s.exec(select(func.max(Venue.id))).scalar()
+        v = Venue(name="New hall", city="Pune", lat=18.5, lng=73.8)
+        s.add(v)
+        s.commit()
+        assert v.id == top + 1
+    again = migrate(src, dst, replace=True)
+    assert again == counts                                        # --replace empties the target first
+
+
+def test_postgres_tables_have_row_level_security(client):
+    """On Postgres (Supabase) every table must have RLS on, so the auto-generated REST API can't reach it."""
+    from sqlalchemy import text
+    from sqlmodel import SQLModel
+
+    from api.db import engine
+
+    if engine.dialect.name != "postgresql":
+        pytest.skip("SQLite has no row level security; run with RALLYOS_TEST_DATABASE_URL to check Postgres")
+    with engine.connect() as c:
+        rows = dict(c.execute(text("SELECT relname, relrowsecurity FROM pg_class WHERE relnamespace = 'public'::regnamespace AND relkind = 'r'")).all())
+    assert all(rows[t.name] for t in SQLModel.metadata.sorted_tables)

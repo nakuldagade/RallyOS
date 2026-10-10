@@ -25,12 +25,14 @@ def import_folder(folder: Path, session: Session) -> str:
     ordered = [p.get("player_id") for p in data["players"]] + [None] * 4
     score = data.get("score", {})
 
-    # replace old rows for this match
+    # replace old rows for this match, children before parents (Postgres enforces the foreign keys:
+    # disputes point at events, events at rallies, rallies at the match)
+    for model in (Dispute, Insight):
+        session.exec(delete(model).where(model.match_id == mid))
     old = session.exec(select(Rally.id).where(Rally.match_id == mid)).all()
     if old:
         session.exec(delete(Event).where(Event.rally_id.in_(old)))
-    for model in (Rally, Dispute, Insight):
-        session.exec(delete(model).where(model.match_id == mid))
+    session.exec(delete(Rally).where(Rally.match_id == mid))
     existing = session.get(Match, mid)
     if existing:
         session.delete(existing)

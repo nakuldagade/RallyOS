@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from api.config import settings
-from api.db import create_all
+from api.db import backend, create_all
 from api.routers import (calibrate, coach, courts, disputes, matches, network, players, sports,
                          tournaments, videos)
 
@@ -28,4 +28,5 @@ app.mount("/media", StaticFiles(directory=str(settings.media_dir)), name="media"
 
 @app.get("/health")
 def health():
-    return {"ok": True, "mock_fallback": settings.mock_fallback, "coach": "claude" if settings.anthropic_key else "template"}
+    return {"ok": True, "mock_fallback": settings.mock_fallback, "coach": "claude" if settings.anthropic_key else "template",
+            "database": backend()}

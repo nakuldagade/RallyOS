@@ -14,12 +14,19 @@ def _path(value: str) -> Path:
 
 
 def _db_url(value: str | None) -> str:
-    """Relative sqlite paths resolve against the repo root, so the CWD doesn't matter."""
+    """Database URL. Empty -> local SQLite (the offline fallback). Relative sqlite paths resolve against the repo
+    root. Postgres / Supabase URLs as copied from the dashboard ("postgresql://..." or "postgres://...") get the
+    psycopg 3 driver, and Supabase hosts get sslmode=require if the URL doesn't say otherwise."""
     if not value:
         return f"sqlite:///{(ROOT / 'data' / 'rallyos.db').as_posix()}"
     prefix = "sqlite:///"
     if value.startswith(prefix) and value[len(prefix):] != ":memory:":
         return prefix + _path(value[len(prefix):]).as_posix()
+    for scheme in ("postgresql://", "postgres://"):
+        if value.startswith(scheme):
+            value = "postgresql+psycopg://" + value[len(scheme):]
+    if value.startswith("postgresql+psycopg://") and "supabase." in value and "sslmode=" not in value:
+        value += ("&" if "?" in value else "?") + "sslmode=require"
     return value
 
 

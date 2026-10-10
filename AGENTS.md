@@ -35,7 +35,7 @@ All coding, processing, testing and the demo happen on this laptop, on CPU. Ther
 - **Videos and outputs:** never commit them to git (`.gitignore`: `demo/**/*.mp4`, `demo/out/`, `media/`, `models/`, `*.pt`). Share them through a cloud folder (Google Drive / OneDrive) when needed.
 - **Speed levers:** `RALLYOS_MAX_WIDTH` (pose input size; 640 is about 3× faster but misses far-court players) and `--stride` (pose every N frames).
 
-**Config / env vars:** `RALLYOS_DEVICE=auto|cpu|cuda`, `RALLYOS_MAX_WIDTH`, `RALLYOS_BALL_TRACKER`, `ANTHROPIC_API_KEY` (optional; coach falls back to templates). Keep them in `.env` (git-ignored) and commit a `.env.example`.
+**Config / env vars:** `RALLYOS_DEVICE=auto|cpu|cuda`, `RALLYOS_MAX_WIDTH`, `RALLYOS_BALL_TRACKER`, `ANTHROPIC_API_KEY` (optional; coach falls back to templates), `DATABASE_URL` (empty = local SQLite; a Supabase session-pooler URI = Postgres; the password lives only in `.env`). Keep them in `.env` (git-ignored) and commit a `.env.example`.
 
 **Agent role (one Claude Code session)**
 - **Builder agent (laptop):** owns all code, runs the pipeline and the app, writes `core/`, `api/`, `web/` and tests, and pushes to `main`.
@@ -64,14 +64,14 @@ Status key: ✅ done and verified · 🟡 built but only partly proven (see the 
 | Block | Status | What exists |
 |---|---|---|
 | **B1 Foundation** | ✅ | Git, scaffold, `.gitignore`, `.env.example`, 6 sport YAMLs (court, net, projectile, scoring, shots, plus `audio`, `in_bounds`, `max_height_m`), mock `match.json` + `tracks.json`, `rallyos.device.get_device()`, YAML-driven scoring engine for all 6 sports (3 families) with tests |
-| **B2 App shell** | 🟡 | FastAPI + SQLModel + SQLite: matches, rallies, events, tracks, disputes, players, coach, matchmaking, predict, courts, bookings, tournaments, sports, calibrate, videos (upload + SSE job progress), score confirm, recalibrate. Web: home, matches, match page, report, upload, disputes, players, coach, play, courts, tournaments, sports, developers. ❌ Missing pages: `capture`, `score` |
+| **B2 App shell** | 🟡 | FastAPI + SQLModel on **SQLite (local default, offline) or Supabase Postgres** (`DATABASE_URL`; `python -m api.migrate_db` copies the data across; RLS switched on for every table so Supabase's REST API can't reach them): matches, rallies, events, tracks, disputes, players, coach, matchmaking, predict, courts, bookings, tournaments, sports, calibrate, videos (upload + SSE job progress), score confirm, recalibrate. Web: home, matches, match page, report, upload, disputes, players, coach, play, courts, tournaments, sports, developers. ❌ Missing pages: `capture`, `score` |
 | **B3 Court + players** | ✅ | **Automatic Court Fingerprint** (`calibration/court_lines.py`, `court_fit.py`): line mask, line merging, rectangle hypotheses, per-sport template fit, sub-pixel refinement, sport detection, quality flag, draggable corners in the web UI; 4-tap fallback; camera self-calibration (focal length + camera position, `camera.py`); court regions of interest (`roi.py`: players and shuttle are only looked for on/around the court); YOLO11n-pose (ONNX fallback); player selector (static officials, court margins, size check); movement stats, live + whole-clip heatmap, zones |
 | **B4 Shuttle + hits + rallies** | 🟡 | Geometric shuttle tracker (track F1 0.82 against RacketVision on 2 clips), tracklet linker, hit detection (F1 0.74), nearest-wrist hitter, rally segmentation, `api.import_match`, upload page with per-stage progress. 🟡 Audio onsets (`audio/onsets.py`) + audio/video fusion are built and unit-tested, but **no real clip with sound has been run yet** (all demo clips have no audio track) |
 | **B5 Intelligence** | 🟡 | ✅ Landing detection → height-corrected court point → IN / OUT / TOO CLOSE with an uncertainty ellipse → suggested rally winner → score through the rules engine → Fair-Play Replay clips for calls under 90% → SHA-256 of the source video → evidence-linked coach (Claude with a number-grounding validator, template fallback). 🟡 IN/OUT is only proven on generated scenes: both calibrated real clips stop before the shuttle lands, so they correctly give no call. ✅ Speed with an error band by event timing (`analytics/speed.py`): average horizontal speed from a contact to the next contact or landing, hidden with a stated reason when an end is missing. ❌ Not built: flight-plane 3D peak speed (cut list), shot-type rules (§4.6), return-to-base / split-step / fatigue (§4.8) |
 | **B6 Network** | 🔵 | Glicko-2 with evidence weights, matchmaking, explainable prediction, player / coach / play / courts / tournaments pages, all on seed data (logic is real, data is sample). ❌ Meetups |
 | **B7 Multi-sport + SDK** | 🟡 | `pip install -e core/`, `developers` page, `sports` page with YAML viewer, RacketVision plug-in (precomputed results). The court fingerprint recognises all 6 templates on generated courts and found a real table-tennis table. 🟡 No full real run yet on tennis / pickleball / padel / squash video. ❌ `volleyball.yaml` stub |
 
-Tests: `pytest` runs `core/tests` + `api/tests` (178 passing, about 1–2 minutes; the court-fit tests are the slow ones). The web app passes `tsc --noEmit`.
+Tests: `pytest` runs `core/tests` + `api/tests` (all passing, about 1–2 minutes; the court-fit tests are the slow ones). API tests also run on Postgres: set `RALLYOS_TEST_DATABASE_URL` to a database whose name contains `test` (it is wiped), e.g. a local `pgserver` instance. The web app passes `tsc --noEmit`.
 
 ### Measured so far (honest numbers, for the pitch and Q&A)
 
@@ -92,6 +92,7 @@ Tests: `pytest` runs `core/tests` + `api/tests` (178 passing, about 1–2 minute
 - No line call or score on real footage until a clip runs until the shuttle lands. A shuttle lost against the net, still in the air, or at the end of the clip gets **no** call.
 - Speeds are average horizontal speeds (a lower bound of peak speed: a high clear reads as ~15 km/h); shot types, return-to-base, split-step and fatigue are not computed, and the UI says so instead of guessing.
 - Hit times from audio are only tested on generated clicks.
+- With Supabase as the database, the app needs the internet: keep `DATABASE_URL` empty (local SQLite) for the offline demo, or migrate back with `python -m api.migrate_db --from <supabase url> --to sqlite:///data/rallyos.db`. Videos, `match.json` files and review clips stay on the laptop's disk either way (`media/`, `demo/out/`); only the database rows move.
 
 ### Next steps, in order (each ends with tests, a commit and a push)
 
@@ -464,7 +465,7 @@ flowchart LR
 |---|---|---|
 | Vision / ML | Python 3.11, OpenCV, `ultralytics` (YOLO11n + pose), `supervision` (ByteTrack, drawing tools), NumPy/SciPy, `filterpy`, ffmpeg (bundled via `imageio-ffmpeg`) | All install with pip, pretrained models included, fast to build with |
 | Backend | **FastAPI** + simple in-process job queue (product: Celery/RQ + Redis), live progress updates (server-sent events) | Fast to build; automatic API docs double as SDK docs |
-| Database | SQLite (via SQLModel) for the hackathon → Postgres (Supabase) for the product | No setup now, easy to migrate later |
+| Database | Supabase Postgres via `DATABASE_URL` (SQLModel + psycopg 3), with local SQLite as the default and offline fallback | Shared, hosted database; the demo still runs with no network |
 | Storage | Local disk → S3 / Cloudflare R2 | |
 | Frontend | **Next.js + Tailwind + shadcn/ui + Recharts**, with an HTML5 `<canvas>` overlay synced to the video (`requestVideoFrameCallback`) | Polished UI quickly; interactive overlays |
 | Mobile / offline | Installable web app (PWA): offline score keeper (IndexedDB), voice scoring through the browser speech API ("point blue"), upload later when online | Works courtside with poor network |
