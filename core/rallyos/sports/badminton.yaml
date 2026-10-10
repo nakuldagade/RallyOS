@@ -59,3 +59,5 @@ shots:   # explainable rule thresholds
   drive: {apex_over_net_m_max: 0.6, max_flight_s: 0.7}
 audio: {band_hz: [1500, 10000], min_gap_s: 0.15, contact_height_m: 1.5}   # hit-onset detector (4.4)
 capture: {min_fps: 60, recommended_fps: 120, camera: "behind baseline, 2-3 m high, centred"}
+view3d:
+  surface: {out: "#14452f", inner: "#1d6b46", line: "#ffffff"}

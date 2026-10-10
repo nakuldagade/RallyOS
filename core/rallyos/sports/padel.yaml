@@ -61,3 +61,7 @@ shots:
   wall_return: {wall_rebound_before_hit: true}
 audio: {band_hz: [1500, 10000], min_gap_s: 0.2, contact_height_m: 1.0}   # hit-onset detector (4.4)
 capture: {min_fps: 60, recommended_fps: 120, camera: "behind back glass, 3-4 m high, centred"}
+view3d:
+  surface: {out: "#1f5a8f", inner: "#2b6cb0", line: "#ffffff"}
+  wall_color: "#bfe3f5"                   # glass walls (see `walls`)
+  wall_opacity: 0.18

@@ -74,6 +74,7 @@ const q = encodeURIComponent;
 
 export const api = {
   courts3dMatches: () => request<Court3DMatch[]>("/v1/courts3d/matches"),
+  matchScene3d: (id: string) => request<Scene3DData>(`/v1/matches/${encodeURIComponent(id)}/scene3d`),
   courts3dScene: (id: string) => request<Scene3DData>(`/v1/courts3d/matches/${encodeURIComponent(id)}`),
   highlights: () => request<{ highlights: HighlightItem[]; matches_without: number }>("/v1/highlights"),
   login: (email: string, password: string, role: "player" | "coach") =>

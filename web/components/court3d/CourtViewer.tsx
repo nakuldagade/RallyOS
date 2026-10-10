@@ -1,8 +1,11 @@
 "use client";
 
-// The 3D court: a court built from the sport's own YAML (lines, net height, size in metres), the players and the shuttle / ball
-// of every visible layer moving along their paths, and a heatmap on the floor. Pause, scrub and slow motion are controlled by
-// the page; this component owns the animation clock and the scene. Colour is the only thing that tells layers apart.
+// The 3D court: a court built from the sport's own YAML (size in metres, every line, the net, the walls of squash and padel,
+// the table top of table tennis, the colours), the players as walking figures that follow their tracked positions and swing at
+// each of their shots, the shuttle / ball of every visible layer moving along its path, and a heatmap on the floor. Pause, scrub
+// and slow motion are controlled by the page; this component owns the animation clock and the scene. Colour is the only thing
+// that tells layers apart. The figures are not captured poses: they move along the measured foot positions with a procedural
+// walk cycle, and the racket arm swings when a shot of theirs is hit.
 import { useEffect, useRef } from "react";
 import type { MutableRefObject } from "react";
 import * as THREE from "three";
@@ -21,6 +24,7 @@ interface Props {
   handle?: MutableRefObject<ViewerHandle | null>;     // a prop, not a ref: next/dynamic does not forward refs
   sport: string;
   court: Scene3DData["court"];
+  objectSize?: number;                                // the ball / shuttle's real size in metres (drawn a little larger so it can be seen)
   layers: Layer3D[];
   duration: number;
   playing: boolean;
@@ -32,14 +36,7 @@ interface Props {
   className?: string;
 }
 
-const SURFACE: Record<string, { out: string; inner: string; line: string }> = {
-  tennis: { out: "#2f6b4f", inner: "#2b5f95", line: "#ffffff" },       // a hard court: blue inside the lines, green around
-  badminton: { out: "#14452f", inner: "#1d6b46", line: "#ffffff" },
-  pickleball: { out: "#2f4f6b", inner: "#3b7a57", line: "#ffffff" },
-  padel: { out: "#1f5a8f", inner: "#2b6cb0", line: "#ffffff" },
-  squash: { out: "#7a5b3a", inner: "#b08a5b", line: "#c0262d" },
-  table_tennis: { out: "#1b2b3c", inner: "#14507d", line: "#ffffff" },
-};
+const DEFAULT_SURFACE = { out: "#14452f", inner: "#1d6b46", line: "#ffffff" };
 
 function disposeTree(o: THREE.Object3D) {
   o.traverse((c) => {
@@ -70,7 +67,7 @@ function nameSprite(text: string, color: string): THREE.Sprite {
 function heatTexture(grid: number[][], color: string): THREE.CanvasTexture {
   const rows = grid.length, cols = grid[0]?.length ?? 0;
   const c = document.createElement("canvas");
-  c.width = cols * 8; c.height = rows * 8;
+  c.width = Math.max(1, cols * 8); c.height = Math.max(1, rows * 8);
   const g = c.getContext("2d")!;
   const col = new THREE.Color(color);
   const rgb = `${Math.round(col.r * 255)},${Math.round(col.g * 255)},${Math.round(col.b * 255)}`;
@@ -87,7 +84,81 @@ function heatTexture(grid: number[][], color: string): THREE.CanvasTexture {
   return t;
 }
 
-export default function CourtViewer(props: Props) {
+// ---- a figure that walks and swings -----------------------------------------------------------------------------------------
+
+interface Figure {
+  group: THREE.Group;
+  body: THREE.Group;                                   // everything that bobs
+  legL: THREE.Group; legR: THREE.Group; armL: THREE.Group; armR: THREE.Group;
+}
+
+function limb(len: number, r: number, mat: THREE.Material): THREE.Group {
+  const pivot = new THREE.Group();
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r * 0.85, len, 10), mat);
+  m.position.y = -len / 2;
+  pivot.add(m);
+  return pivot;
+}
+
+function makeFigure(color: string, ghost: boolean, label: string): Figure {
+  const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.6, transparent: ghost, opacity: ghost ? 0.5 : 1 });
+  const dark = new THREE.MeshStandardMaterial({ color: new THREE.Color(color).multiplyScalar(0.45), roughness: 0.7, transparent: ghost, opacity: ghost ? 0.5 : 1 });
+  const skin = new THREE.MeshStandardMaterial({ color: "#e8c39e", roughness: 0.8, transparent: ghost, opacity: ghost ? 0.5 : 1 });
+  const group = new THREE.Group();
+  const body = new THREE.Group();
+  group.add(body);
+  const hips = new THREE.Group();
+  hips.position.y = 0.92;
+  body.add(hips);
+  const legL = limb(0.9, 0.075, dark), legR = limb(0.9, 0.075, dark);
+  legL.position.x = -0.1; legR.position.x = 0.1;
+  hips.add(legL, legR);
+  const torso = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.58, 0.24), mat);
+  torso.position.y = 0.3;
+  hips.add(torso);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.115, 14, 10), skin);
+  head.position.y = 0.75;
+  hips.add(head);
+  const shoulder = new THREE.Group();
+  shoulder.position.y = 0.52;
+  hips.add(shoulder);
+  const armL = limb(0.62, 0.05, mat), armR = limb(0.62, 0.05, mat);
+  armL.position.x = -0.27; armR.position.x = 0.27;
+  shoulder.add(armL, armR);
+  // the racket: a handle continuing the arm and an oval head
+  const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.35, 8), new THREE.MeshStandardMaterial({ color: "#222" }));
+  handle.position.y = -0.62 - 0.17;
+  const frame = new THREE.Mesh(new THREE.TorusGeometry(0.12, 0.012, 8, 20), new THREE.MeshStandardMaterial({ color: "#111" }));
+  frame.scale.set(0.8, 1.15, 1);
+  frame.position.y = -0.62 - 0.35 - 0.14;
+  const strings = new THREE.Mesh(new THREE.CircleGeometry(0.115, 20), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.35, side: THREE.DoubleSide }));
+  strings.scale.set(0.8, 1.15, 1);
+  strings.position.copy(frame.position);
+  armR.add(handle, frame, strings);
+  const sprite = nameSprite(label, color);
+  sprite.position.y = 2.25;
+  group.add(sprite);
+  return { group, body, legL, legR, armL, armR };
+}
+
+const smooth = (x: number) => x * x * (3 - 2 * x);
+
+/** Right-arm angle (radians about x, 0 = hanging, more negative = raised forward / overhead) at u in [0, 1] of a swing around the contact at 0.5. */
+function swingAngle(u: number, overhead: boolean): number {
+  const keys: [number, number][] = overhead ? [[0, -0.2], [0.3, -2.5], [0.5, -3.0], [0.75, -1.2], [1, -0.2]] : [[0, -0.2], [0.3, -1.0], [0.5, -1.5], [0.75, -0.9], [1, -0.2]];
+  for (let i = 1; i < keys.length; i++) {
+    if (u <= keys[i][0]) {
+      const [u0, a0] = keys[i - 1], [u1, a1] = keys[i];
+      return a0 + (a1 - a0) * smooth((u - u0) / (u1 - u0));
+    }
+  }
+  return keys[keys.length - 1][1];
+}
+
+const OVERHEAD = new Set(["smash", "clear", "drop", "serve"]);
+const SWING_S = 0.7;
+
+const CourtViewer = function CourtViewer(props: Props) {
   const mount = useRef<HTMLDivElement>(null);
   const live = useRef(props);
   live.current = props;
@@ -106,7 +177,7 @@ export default function CourtViewer(props: Props) {
     renderer.domElement.style.display = "block";
     const scene = new THREE.Scene();
     scene.background = new THREE.Color("#0b1220");
-    const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 400);
+    const camera = new THREE.PerspectiveCamera(45, 1, 0.05, 400);
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.maxPolarAngle = Math.PI / 2 - 0.03;
@@ -117,54 +188,114 @@ export default function CourtViewer(props: Props) {
 
     let courtGroup: THREE.Group | null = null;
     let layerGroup: THREE.Group | null = null;
-    let dynamic: { layer: Layer3D; shuttle: THREE.Mesh; trail: THREE.Mesh[]; player: THREE.Group; bright: { line: THREE.Line; flight: Layer3D["flights"][0] }[] }[] = [];
+    type Dyn = {
+      layer: Layer3D; shuttle: THREE.Mesh; trail: THREE.Mesh[]; fig: Figure | null; label: string;
+      bright: { line: THREE.Line; flight: Layer3D["flights"][0] }[]; hits: { t: number; overhead: boolean }[]; cum: number[];
+    };
+    let dynamic: Dyn[] = [];
     let time = 0;
     let lastReport = 0;
     let raf = 0;
     let last = performance.now();
     let courtKey = "";
 
+    const planeZ = () => live.current.court.view3d?.plane_height_m ?? 0;
     const toWorld = (x: number, y: number, z: number, c = live.current.court) => new THREE.Vector3(x - c.width / 2, z, c.length / 2 - y);
 
     const preset = (p: CameraPreset) => {
       const { length: L, width: W } = live.current.court;
-      const span = Math.max(L, W);
+      const span = Math.max(L, W) + (planeZ() > 0 ? 3 : 0);
+      const walled = !!live.current.court.view3d?.wall_color;      // a camera outside walls looks over them, from higher up
       const pos: Record<CameraPreset, [number, number, number]> = {
-        behind: [0, span * 0.42, L / 2 + span * 0.55],
+        behind: [0, span * (walled ? 0.8 : 0.42) + planeZ(), L / 2 + span * (walled ? 0.7 : 0.55)],
         top: [0, span * 1.25, 0.01],
         side: [W / 2 + span * 0.85, span * 0.35, 0],
-        broadcast: [W * 0.9, span * 0.55, L / 2 + span * 0.45],
+        broadcast: [W * 0.9 + 1, span * (walled ? 0.8 : 0.55) + planeZ(), L / 2 + span * 0.45],
       };
       camera.position.set(...pos[p]);
-      controls.target.set(0, 0, 0);
+      controls.target.set(0, planeZ(), 0);
       controls.update();
+    };
+
+    const wallMesh = (w: NonNullable<Scene3DData["court"]["walls"]>[number], court: Scene3DData["court"], color: string, opacity: number): THREE.Group | null => {
+      const m = /^([xy])=([\d.]+)$/.exec(w.plane ?? "");
+      if (!m) return null;
+      const axis = m[1], v = Number(m[2]);
+      const { length: L, width: W } = court;
+      const lineTop = Math.max(0, ...((w.lines ?? []).flatMap((l) => [l.p1[1], l.p2[1]])));
+      const hAt = (along: number): number => {                               // wall height at a position along it
+        if (w.height_m != null) return w.height_m;
+        if (axis === "x" && w.out_line_from_m != null && w.out_line_to_m != null) return w.out_line_to_m + (w.out_line_from_m - w.out_line_to_m) * (along / L);   // squash side wall slopes to the back
+        if (w.out_line_m != null) return w.out_line_m;
+        return lineTop || 3;
+      };
+      const [a0, a1] = axis === "y" ? [0, W] : (w.y_range ?? [0, L]);
+      const g = new THREE.Group();
+      const n = 12;
+      const pts: number[] = [];
+      for (let i = 0; i <= n; i++) {
+        const along = a0 + ((a1 - a0) * i) / n;
+        const h = hAt(along);
+        const bottom = axis === "y" ? toWorld(along, v, 0, court) : toWorld(v, along, 0, court);
+        pts.push(bottom.x, 0, bottom.z, bottom.x, h, bottom.z);
+      }
+      const idx: number[] = [];
+      for (let i = 0; i < n; i++) { const o = i * 2; idx.push(o, o + 1, o + 2, o + 1, o + 3, o + 2); }
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute("position", new THREE.Float32BufferAttribute(pts, 3));
+      geo.setIndex(idx);
+      geo.computeVertexNormals();
+      g.add(new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color, transparent: true, opacity, side: THREE.DoubleSide, depthWrite: opacity > 0.7 })));
+      for (const l of w.lines ?? []) {                                       // squash's tin, service and out lines on the front wall
+        const h = l.p1[1];
+        const pa = axis === "y" ? toWorld(l.p1[0], v, h, court) : toWorld(v, l.p1[0], h, court);
+        const pb = axis === "y" ? toWorld(l.p2[0], v, h, court) : toWorld(v, l.p2[0], h, court);
+        const lm = new THREE.Mesh(new THREE.BoxGeometry(pa.distanceTo(pb), 0.04, 0.02), new THREE.MeshBasicMaterial({ color: "#c0262d" }));
+        lm.position.copy(pa.clone().add(pb).multiplyScalar(0.5));
+        g.add(lm);
+      }
+      return g;
     };
 
     const buildCourt = () => {
       const { court, sport } = live.current;
-      const key = `${sport}:${court.length}:${court.width}:${court.lines.length}`;
+      const key = `${sport}:${court.length}:${court.width}:${court.lines.length}:${(court.walls ?? []).length}:${planeZ()}`;
       if (key === courtKey) return;
       courtKey = key;
       if (courtGroup) { scene.remove(courtGroup); disposeTree(courtGroup); }
-      const col = SURFACE[sport] ?? SURFACE.badminton;
+      const view = court.view3d ?? {};
+      const col = { ...DEFAULT_SURFACE, ...(view.surface ?? {}) };
       const { length: L, width: W } = court;
+      const pz = planeZ();
       const g = new THREE.Group();
-      const pad = Math.max(L, W) * 0.22;
+      const pad = Math.max(Math.max(L, W) * 0.22, pz > 0 ? 3 : 0);
       const out = new THREE.Mesh(new THREE.PlaneGeometry(W + 2 * pad, L + 2 * pad), new THREE.MeshStandardMaterial({ color: col.out, roughness: 0.95 }));
       out.rotation.x = -Math.PI / 2;
       g.add(out);
-      const inner = new THREE.Mesh(new THREE.PlaneGeometry(W, L), new THREE.MeshStandardMaterial({ color: col.inner, roughness: 0.85 }));
-      inner.rotation.x = -Math.PI / 2;
-      inner.position.y = 0.004;
-      g.add(inner);
+      if (pz > 0) {                                                          // a table: a slab on legs
+        const slab = new THREE.Mesh(new THREE.BoxGeometry(W, 0.04, L), new THREE.MeshStandardMaterial({ color: col.inner, roughness: 0.5 }));
+        slab.position.y = pz - 0.02;
+        g.add(slab);
+        if (view.legs) for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+          const leg = new THREE.Mesh(new THREE.BoxGeometry(0.07, pz - 0.04, 0.07), new THREE.MeshStandardMaterial({ color: "#222" }));
+          leg.position.set(sx * (W / 2 - 0.12), (pz - 0.04) / 2, sz * (L / 2 - 0.2));
+          g.add(leg);
+        }
+      } else {
+        const inner = new THREE.Mesh(new THREE.PlaneGeometry(W, L), new THREE.MeshStandardMaterial({ color: col.inner, roughness: 0.85 }));
+        inner.rotation.x = -Math.PI / 2;
+        inner.position.y = 0.004;
+        g.add(inner);
+      }
       const lineMat = new THREE.MeshBasicMaterial({ color: col.line });
+      const lw = pz > 0 ? 0.02 : 0.05;
       for (const l of court.lines) {
         if (l.id === "net") continue;
         const a = toWorld(l.p1[0], l.p1[1], 0), b = toWorld(l.p2[0], l.p2[1], 0);
         const len = a.distanceTo(b);
-        const m = new THREE.Mesh(new THREE.BoxGeometry(len + 0.05, 0.004, 0.05), lineMat);
+        const m = new THREE.Mesh(new THREE.BoxGeometry(len + lw, 0.004, lw), lineMat);
         m.position.copy(a.clone().add(b).multiplyScalar(0.5));
-        m.position.y = 0.008;
+        m.position.y = pz + 0.008;
         m.rotation.y = -Math.atan2(b.z - a.z, b.x - a.x);
         g.add(m);
       }
@@ -172,7 +303,8 @@ export default function CourtViewer(props: Props) {
       if (net) {
         const hc = court.net.height_center ?? 1.0, hp = court.net.height_post ?? hc;
         const a = toWorld(net.p1[0], net.p1[1], 0), b = toWorld(net.p2[0], net.p2[1], 0);
-        const len = a.distanceTo(b);
+        const over = court.net.overhang_m ?? 0;
+        const len = a.distanceTo(b) + 2 * over;
         const cv = document.createElement("canvas");
         cv.width = 256; cv.height = 64;
         const cg = cv.getContext("2d")!;
@@ -183,17 +315,22 @@ export default function CourtViewer(props: Props) {
         const tex = new THREE.CanvasTexture(cv);
         const mesh = new THREE.Mesh(new THREE.PlaneGeometry(len, hc), new THREE.MeshBasicMaterial({ map: tex, transparent: true, side: THREE.DoubleSide }));
         mesh.position.copy(a.clone().add(b).multiplyScalar(0.5));
-        mesh.position.y = hc / 2;
+        mesh.position.y = pz + hc / 2;
         mesh.rotation.y = -Math.atan2(b.z - a.z, b.x - a.x);
         g.add(mesh);
-        const tape = new THREE.Mesh(new THREE.BoxGeometry(len, 0.04, 0.03), new THREE.MeshBasicMaterial({ color: "#f8fafc" }));
-        tape.position.copy(mesh.position); tape.position.y = hc; tape.rotation.y = mesh.rotation.y;
+        const tape = new THREE.Mesh(new THREE.BoxGeometry(len, Math.max(0.012, hc * 0.04), 0.02), new THREE.MeshBasicMaterial({ color: "#f8fafc" }));
+        tape.position.copy(mesh.position); tape.position.y = pz + hc; tape.rotation.y = mesh.rotation.y;
         g.add(tape);
         for (const p of [a, b]) {
-          const post = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, hp + 0.05, 12), new THREE.MeshStandardMaterial({ color: "#1f2937" }));
-          post.position.set(p.x, (hp + 0.05) / 2, p.z);
+          const post = new THREE.Mesh(new THREE.CylinderGeometry(Math.min(0.04, hp * 0.2), Math.min(0.04, hp * 0.2), hp + 0.02, 12), new THREE.MeshStandardMaterial({ color: "#1f2937" }));
+          post.position.set(p.x, pz + (hp + 0.02) / 2, p.z);
           g.add(post);
         }
+      }
+      for (const w of court.walls ?? []) {
+        if (!view.wall_color) break;                                        // a sport with no drawn walls (see view3d in its YAML)
+        const wm = wallMesh(w, court, view.wall_color, view.wall_opacity ?? 0.3);
+        if (wm) g.add(wm);
       }
       courtGroup = g;
       scene.add(g);
@@ -203,12 +340,13 @@ export default function CourtViewer(props: Props) {
     const buildLayers = () => {
       if (layerGroup) { scene.remove(layerGroup); disposeTree(layerGroup); }
       dynamic = [];
-      const { court, layers } = live.current;
+      const { court, layers, objectSize } = live.current;
       const lg = new THREE.Group();
+      const ballR = Math.max(0.05, (objectSize ?? 0.065) * 1.6);
       layers.forEach((layer, li) => {
         if (!layer.visible) return;
         const color = new THREE.Color(layer.color);
-        const bright: { line: THREE.Line; flight: Layer3D["flights"][0] }[] = [];
+        const bright: Dyn["bright"] = [];
         if (layer.showHeat && layer.heat) {
           const hm = new THREE.Mesh(new THREE.PlaneGeometry(court.width, layer.heat.grid.length * layer.heat.cell),
             new THREE.MeshBasicMaterial({ map: heatTexture(layer.heat.grid, layer.color), transparent: true, depthWrite: false }));
@@ -225,7 +363,6 @@ export default function CourtViewer(props: Props) {
             ? new THREE.Line(geo, new THREE.LineDashedMaterial({ color, dashSize: 0.18, gapSize: 0.12, transparent: true, opacity: layer.ghost ? 0.25 : 0.4 }))
             : new THREE.Line(geo, new THREE.LineBasicMaterial({ color, transparent: true, opacity: layer.ghost ? 0.22 : 0.35 }));
           if (dashed) faint.computeLineDistances();
-          faint.name = `faint:${li}`;
           lg.add(faint);
           const hot = new THREE.Line(geo.clone(), new THREE.LineBasicMaterial({ color, transparent: true, opacity: layer.ghost ? 0.55 : 1 }));
           hot.geometry.setDrawRange(0, 0);
@@ -233,39 +370,75 @@ export default function CourtViewer(props: Props) {
           lg.add(hot);
           bright.push({ line: hot, flight: f });
         }
-        const shuttle = new THREE.Mesh(new THREE.SphereGeometry(layer.ghost ? 0.1 : 0.13, 16, 12), new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.6 }));
+        const shuttle = new THREE.Mesh(new THREE.SphereGeometry(layer.ghost ? ballR * 0.8 : ballR, 16, 12), new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.6 }));
         shuttle.visible = false;
         lg.add(shuttle);
         const trail: THREE.Mesh[] = [];
         for (let k = 0; k < 10; k++) {
-          const m = new THREE.Mesh(new THREE.SphereGeometry(0.07 * (1 - k / 14), 8, 6), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.5 * (1 - k / 10) }));
+          const m = new THREE.Mesh(new THREE.SphereGeometry(ballR * 0.55 * (1 - k / 14), 8, 6), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.5 * (1 - k / 10) }));
           m.visible = false;
           lg.add(m);
           trail.push(m);
         }
-        const player = new THREE.Group();
-        const body = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.26, 1.3, 16), new THREE.MeshStandardMaterial({ color, transparent: layer.ghost, opacity: layer.ghost ? 0.45 : 1 }));
-        body.position.y = 0.75;
-        const head = new THREE.Mesh(new THREE.SphereGeometry(0.17, 16, 12), new THREE.MeshStandardMaterial({ color, transparent: layer.ghost, opacity: layer.ghost ? 0.45 : 1 }));
-        head.position.y = 1.65;
-        const label = nameSprite(layer.label, layer.color);
-        label.position.y = 2.3;
-        player.add(body, head, label);
-        player.visible = layer.positions.length > 0;
-        lg.add(player);
-        dynamic.push({ layer, shuttle, trail, player, bright });
+        let fig: Figure | null = null;
+        const cum: number[] = [];
+        if (layer.positions.length > 0) {
+          fig = makeFigure(layer.color, !!layer.ghost, layer.label);
+          lg.add(fig.group);
+          let d = 0;
+          layer.positions.forEach((p, i) => { if (i) d += Math.hypot(p[1] - layer.positions[i - 1][1], p[2] - layer.positions[i - 1][2]); cum.push(d); });
+          cum.unshift(0);
+          cum.length = layer.positions.length;
+        }
+        const hits = layer.flights.map((f) => ({ t: f.t0, overhead: OVERHEAD.has(f.shot ?? "") || f.peak_z > 2.0 }));
+        dynamic.push({ layer, shuttle, trail, fig, label: layer.label, bright, hits, cum });
       });
       layerGroup = lg;
       scene.add(lg);
       update(time);
     };
 
+    const animateFigure = (d: Dyn, t: number, w: THREE.Vector3) => {
+      const f = d.fig!;
+      const pos = d.layer.positions;
+      // walking: how fast, and how far along the path (the phase of the stride is the distance walked)
+      const p0 = positionAt(pos, t - 0.25), p1 = positionAt(pos, t + 0.25);
+      const speed = p0 && p1 ? Math.hypot(p1[0] - p0[0], p1[1] - p0[1]) / 0.5 : 0;
+      let walked = 0;
+      if (d.cum.length > 1) {
+        const i = Math.max(0, pos.findIndex((q) => q[0] > t) - 1);
+        const j = Math.min(i + 1, pos.length - 1);
+        const u = pos[j][0] > pos[i][0] ? Math.min(1, Math.max(0, (t - pos[i][0]) / (pos[j][0] - pos[i][0]))) : 0;
+        walked = d.cum[i] + (d.cum[j] - d.cum[i]) * u;
+      }
+      const amp = Math.min(1, speed / 2.5) * 0.75;
+      const ph = (walked / 0.85) * Math.PI;
+      f.legL.rotation.x = Math.sin(ph) * amp;
+      f.legR.rotation.x = -Math.sin(ph) * amp;
+      f.armL.rotation.x = -Math.sin(ph) * amp * 0.6;
+      f.body.position.y = Math.abs(Math.cos(ph)) * 0.05 * Math.min(1, speed / 2.5);
+      f.body.rotation.x = Math.min(0.25, speed * 0.05);                             // leans into a run
+      // facing the net, a little toward where it is going when it moves fast
+      const net = new THREE.Vector3(0, 0, 0);
+      let yaw = Math.atan2(net.x - w.x, net.z - w.z);
+      if (speed > 1.5 && p0 && p1) yaw += Math.max(-0.6, Math.min(0.6, Math.atan2(p1[0] - p0[0], -(p1[1] - p0[1])) * 0.15));
+      f.group.rotation.y = yaw;
+      // the racket arm: at rest it hangs a little forward, and it swings around each contact of this player's shots
+      let arm = -0.25;
+      for (const h of d.hits) {
+        if (Math.abs(t - h.t) <= SWING_S / 2) { arm = swingAngle((t - (h.t - SWING_S / 2)) / SWING_S, h.overhead); break; }
+      }
+      f.armR.rotation.x = arm;
+    };
+
     const update = (t: number) => {
+      const pz = planeZ();
       for (const d of dynamic) {
         const p = positionAt(d.layer.positions, t);
-        if (p) {
+        if (p && d.fig) {
           const w = toWorld(p[0], p[1], 0);
-          d.player.position.set(w.x, 0, w.z);
+          d.fig.group.position.set(w.x, 0, w.z);
+          animateFigure(d, t, w);
         }
         for (const b of d.bright) {
           const n = b.flight.samples.length;
@@ -286,6 +459,7 @@ export default function CourtViewer(props: Props) {
           }
         }
       }
+      void pz;
     };
 
     const resize = () => {
@@ -336,8 +510,10 @@ export default function CourtViewer(props: Props) {
 
   // anything that changes what is drawn rebuilds it (the animation clock is kept)
   const key = JSON.stringify(props.layers.map((l) => [l.id, l.visible, l.showHeat, l.color, l.ghost, l.flights.length, l.positions.length])) +
-    `|${props.sport}|${props.court.length}|${props.court.width}`;
+    `|${props.sport}|${props.court.length}|${props.court.width}|${props.court.view3d?.plane_height_m ?? 0}|${(props.court.walls ?? []).length}`;
   useEffect(() => { api.current?.rebuild(); }, [key]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   return <div ref={mount} className={props.className} />;
-}
+};
+
+export default CourtViewer;

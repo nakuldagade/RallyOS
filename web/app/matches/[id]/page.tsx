@@ -24,6 +24,7 @@ import AudioCard from "@/components/match/AudioCard";
 import BallTrackingCard from "@/components/match/BallTrackingCard";
 import AssignPlayers from "@/components/match/AssignPlayers";
 import HighlightCard from "@/components/match/HighlightCard";
+import MatchSmartCourt, { SmartCourtLink } from "@/components/match/MatchSmartCourt";
 
 type Tab = "stats" | "shots" | "events" | "insights";
 
@@ -38,6 +39,7 @@ function MatchVision() {
   const [seek, setSeek] = useState<{ t: number; n: number }>();
   const [tab, setTab] = useState<Tab>("stats");
   const [heatMode, setHeatMode] = useState<string>("");   // "" | "live:<track>" | "full:<track>"
+  const [courtView, setCourtView] = useState<"2d" | "3d">(params.get("view") === "3d" ? "3d" : "2d");   // the court card: 2D top-down or the 3D Smart Court (?view=3d opens it)
 
   const m = match.data?.data;
   const tr = tracks.data?.data ?? null;
@@ -161,24 +163,37 @@ function MatchVision() {
       {/* Row 2: where the players were, and how well the tracking worked */}
       <div className="mt-4 grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
         {calibrated ? (
-          <Card title="Top-down view" actions={
-            <select className="input py-1 text-xs" value={heatMode} onChange={(e) => setHeatMode(e.target.value)}>
-              <option value="">Live positions</option>
-              {m.players.map((p) => <option key={`l${p.track_id}`} value={`live:${p.track_id}`}>Live heatmap: {p.name}</option>)}
-              {m.players.map((p) => <option key={`f${p.track_id}`} value={`full:${p.track_id}`}>Whole-clip heatmap: {p.name}</option>)}
-            </select>}>
-            <div className="grid gap-5 md:grid-cols-[minmax(0,340px)_minmax(0,1fr)]">
-              <div>
-                <MiniCourt sport={sport} dots={dots} heat={heat} rects={zoneBoxes} className="mx-auto h-[400px] w-full" />
-                <p className="mt-2 text-xs text-muted">
-                  Hollow yellow rings are landings (click to jump).
-                  {heat ? (heatKind === "live" ? ` Heatmap builds up as the video plays (to ${fmtTime(time)}).` : " Heatmap of the whole clip from tracked foot positions.") : ""}
-                </p>
+          <Card className={courtView === "3d" ? "xl:col-span-2" : ""} title={courtView === "3d" ? "Smart Court (3D)" : "Top-down view"} actions={
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex gap-1 text-xs">
+                {([["2d", "2D top-down"], ["3d", "3D Smart Court"]] as const).map(([k, l]) => (
+                  <button key={k} onClick={() => setCourtView(k)} className={`rounded-md px-2 py-1 ${courtView === k ? "bg-accent text-accent-fg" : "border border-border"}`}>{l}</button>
+                ))}
               </div>
-              <div className="min-w-0">
-                <ZoneSummary rows={zoneRows} timeLabel={`up to ${fmtTime(time)}`} />
+              {courtView === "2d" ? (
+                <select className="input py-1 text-xs" value={heatMode} onChange={(e) => setHeatMode(e.target.value)}>
+                  <option value="">Live positions</option>
+                  {m.players.map((p) => <option key={`l${p.track_id}`} value={`live:${p.track_id}`}>Live heatmap: {p.name}</option>)}
+                  {m.players.map((p) => <option key={`f${p.track_id}`} value={`full:${p.track_id}`}>Whole-clip heatmap: {p.name}</option>)}
+                </select>
+              ) : <SmartCourtLink />}
+            </div>}>
+            {courtView === "3d" ? (
+              <MatchSmartCourt matchId={m.match_id} time={time} mock={match.data?.mock} />
+            ) : (
+              <div className="grid gap-5 md:grid-cols-[minmax(0,340px)_minmax(0,1fr)]">
+                <div>
+                  <MiniCourt sport={sport} dots={dots} heat={heat} rects={zoneBoxes} className="mx-auto h-[400px] w-full" />
+                  <p className="mt-2 text-xs text-muted">
+                    Hollow yellow rings are landings (click to jump).
+                    {heat ? (heatKind === "live" ? ` Heatmap builds up as the video plays (to ${fmtTime(time)}).` : " Heatmap of the whole clip from tracked foot positions.") : ""}
+                  </p>
+                </div>
+                <div className="min-w-0">
+                  <ZoneSummary rows={zoneRows} timeLabel={`up to ${fmtTime(time)}`} />
+                </div>
               </div>
-            </div>
+            )}
           </Card>
         ) : (
           <Card title="Top-down view">

@@ -31,13 +31,45 @@ export interface HeatGrid3D {
   frames: number;
 }
 
+/** A wall of squash or padel, as the sport's YAML describes it (plane "y=9.75" / "x=0", heights in metres). */
+export interface Wall3D {
+  id: string;
+  plane: string;
+  height_m?: number;
+  y_range?: [number, number];
+  material?: string;
+  out_line_m?: number;
+  out_line_from_m?: number;
+  out_line_to_m?: number;
+  lines?: { id: string; p1: [number, number]; p2: [number, number] }[];
+}
+
+/** How a sport looks in 3D: colours, a table top's height, wall colour: all from its YAML (`view3d`). */
+export interface View3D {
+  surface?: { out: string; inner: string; line: string };
+  plane_height_m?: number;
+  legs?: boolean;
+  wall_color?: string;
+  wall_opacity?: number;
+}
+
+export interface Court3DGeometry {
+  length: number;
+  width: number;
+  lines: { id: string; p1: [number, number]; p2: [number, number] }[];
+  net: { height_center?: number; height_post?: number; overhang_m?: number };
+  walls?: Wall3D[];
+  view3d?: View3D;
+}
+
 export interface Scene3DData {
   match_id: string;
   date: string;
   sport: string;
   fps: number;
   duration_s: number | null;
-  court: { length: number; width: number; lines: { id: string; p1: [number, number]; p2: [number, number] }[]; net: { height_center?: number; height_post?: number } };
+  court: Court3DGeometry;
+  object_size_m?: number;
   players: Court3DPlayer[];
   flights: Flight3D[];
   positions: Record<string, [number, number, number][]>;   // track_id -> [t, x, y]

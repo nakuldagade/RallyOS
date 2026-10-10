@@ -51,3 +51,8 @@ shots:
   flick: {from_zone: short, max_flight_s: 0.35}
 audio: {band_hz: [1500, 10000], min_gap_s: 0.08, contact_height_m: 0.9}   # hit-onset detector (4.4)
 capture: {min_fps: 120, recommended_fps: 240, camera: "side-on at table height + 0.5 m, net centred"}
+view3d:
+  surface: {out: "#1b2b3c", inner: "#14507d", line: "#ffffff"}
+  plane_height_m: 0.76                    # the playing surface is a table top, 76 cm above the floor
+  contact_above_plane_m: [0.2, 0.12]      # a hit is about 20 cm above the table (1 sigma 12 cm), whatever the pose
+  legs: true

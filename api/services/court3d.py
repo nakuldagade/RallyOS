@@ -92,15 +92,21 @@ def _positions(frames: list[dict], fps: float, track_id: int) -> list[list[float
     return out
 
 
-def scene(user: User, match_id: str, session: Session) -> dict | None:
-    """The viewer payload for one match, or None if this user may not see it (the router answers 403)."""
+def scene(user: User | None, match_id: str, session: Session, open_if_unassigned: bool = False) -> dict | None:
+    """The viewer payload for one match, or None if this user may not see it (the router answers 403).
+
+    open_if_unassigned (the 3D view on a match's own page): a match nobody was assigned to has no owner to protect, so anyone who
+    can open the match can open its 3D view; once players are assigned, the rules above apply again."""
     from rallyos.analytics.flights3d import reconstruct
     from rallyos.sports import load_sport
 
     row = session.get(Match, match_id)
     if row is None or match_id in MOCK_IDS:
         raise KeyError(match_id)
-    allowed = _allowed_tracks(user, row, session)
+    if open_if_unassigned and not (row.p1 or row.p2):
+        allowed = {1: None, 2: None}
+    else:
+        allowed = _allowed_tracks(user, row, session) if user is not None else None
     if not allowed:
         return None
     data = store.load_match(match_id, session)
@@ -117,9 +123,11 @@ def scene(user: User, match_id: str, session: Session) -> dict | None:
     length, width = float(court["length"]), float(court["width"])
     return {
         "match_id": match_id, "date": row.created_at, "sport": data["sport"], "fps": fps, "duration_s": data.get("video", {}).get("duration_s"),
-        "court": {"length": length, "width": width, "lines": court["lines"], "net": cfg.get("net") or {}},
+        "court": {"length": length, "width": width, "lines": court["lines"], "net": cfg.get("net") or {}, "walls": cfg.get("walls") or [],
+                  "view3d": cfg.get("view3d") or {}},
         "players": [{"track_id": t, "player_id": pid, "name": (meta.get(t) or {}).get("name") or f"Player {t}", "side": (meta.get(t) or {}).get("side"),
                      "color": color_for(pid, t)} for t, pid in allowed.items()],
+        "object_size_m": (cfg.get("projectile") or {}).get("size_m"),
         "flights": flights,
         "positions": {str(t): _positions(frames, fps, t) for t in allowed},
         "heat": {str(t): _heat(frames, t, length, width) for t in allowed},

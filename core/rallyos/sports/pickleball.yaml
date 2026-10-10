@@ -53,3 +53,5 @@ shots:
   smash: {wrist_above_head: true, descent_deg_min: 20}
 audio: {band_hz: [1500, 10000], min_gap_s: 0.2, contact_height_m: 1.0}   # hit-onset detector (4.4)
 capture: {min_fps: 60, recommended_fps: 120, camera: "behind baseline, 2-3 m high, centred"}
+view3d:
+  surface: {out: "#2f4f6b", inner: "#3b7a57", line: "#ffffff"}

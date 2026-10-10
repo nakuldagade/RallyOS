@@ -64,3 +64,7 @@ shots:
   kill: {front_wall_height_m_max: 0.8, min_speed_kmh: 100}
 audio: {band_hz: [1500, 10000], min_gap_s: 0.12, contact_height_m: 1.0}   # hit-onset detector (4.4)
 capture: {min_fps: 60, recommended_fps: 120, camera: "behind back wall (glass) or high in the gallery, centred"}
+view3d:
+  surface: {out: "#b89a6e", inner: "#d9c3a0", line: "#c0262d"}      # a wooden floor with red lines
+  wall_color: "#f1f5f9"                   # white walls (see `walls`)
+  wall_opacity: 0.3                       # translucent: the near wall must not hide the floor from a camera outside the court

@@ -11,7 +11,8 @@ from api.db import get_session
 from api.models import Match, Player, User
 from api.schemas import MatchJSON, MatchSummary, Recalibrate, ScoreConfirm
 from api.services import jobs, matches_admin, rating, store
-from api.services.access import current_user
+from api.services import court3d
+from api.services.access import current_user, optional_user
 
 router = APIRouter(tags=["matches"])
 
@@ -157,3 +158,16 @@ def assign_players(match_id: str, body: AssignPlayers, user: User = Depends(curr
     session.add(row)
     session.commit()
     return {"match_id": match_id, "side1": row.p1, "side2": row.p2}
+
+
+@router.get("/matches/{match_id}/scene3d")
+def match_scene3d(match_id: str, user: User | None = Depends(optional_user), session: Session = Depends(get_session)):
+    """The 3D court data for the 3D view on a match's page: both players, every reconstructed shot, positions and heat. Open for a
+    match nobody was assigned to; once players are assigned, only they and the coaches who have them on a roster (403 / 401 otherwise)."""
+    try:
+        data = court3d.scene(user, match_id, session, open_if_unassigned=True)
+    except KeyError:
+        raise HTTPException(404, "match not found") from None
+    if data is None:
+        raise HTTPException(403 if user else 401, "this match belongs to its players and their coaches: log in as one of them")
+    return data

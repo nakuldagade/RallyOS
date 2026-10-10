@@ -127,3 +127,29 @@ def test_a_tennis_match_uses_the_tennis_court_and_bounces_its_ball(client, tmp_p
 def test_a_person_has_the_same_colour_everywhere():
     assert color_for("p_anika", 1) == color_for("p_anika", 2) != color_for("p_rohan", 1)
     assert color_for(None, 1) != color_for(None, 2) and color_for("p_new_player", 1) == color_for("p_new_player", 2)
+
+
+# -- the 3D view on a match's own page -----------------------------------------------------------------------------------------
+
+def test_a_match_nobody_was_assigned_to_opens_in_3d_for_anyone_and_an_assigned_one_only_for_its_people(client, matches, tmp_path):
+    make_match(tmp_path, "m_3d_free", p1=None, p2=None)
+    d = client.get("/v1/matches/m_3d_free/scene3d")                                          # no login at all
+    assert d.status_code == 200 and {p["track_id"] for p in d.json()["players"]} == {1, 2} and d.json()["flights"]
+    assert client.get("/v1/matches/m_3d_a/scene3d").status_code == 401                          # assigned: log in first
+    assert client.get("/v1/matches/m_3d_a/scene3d", headers=headers(client, "kabir@rallyos.demo")).status_code == 403      # Kabir was not in match a
+    assert client.get("/v1/matches/m_3d_a/scene3d", headers=headers(client, "rohan@rallyos.demo")).status_code == 200      # he was
+    assert client.get("/v1/matches/m_3d_a/scene3d", headers=headers(client, "coach.vikram@rallyos.demo")).status_code == 200
+    assert client.get("/v1/matches/m_nope/scene3d").status_code == 404
+
+
+def test_every_sport_comes_with_its_own_3d_look_and_walls_and_a_table_top_height(client, tmp_path):
+    for sport in ("tennis", "badminton", "pickleball", "padel", "squash", "table_tennis"):
+        make_match(tmp_path, f"m_3d_{sport}", sport=sport, p1=None, p2=None)
+        d = client.get(f"/v1/matches/m_3d_{sport}/scene3d").json()
+        assert d["court"]["view3d"]["surface"]["inner"].startswith("#"), sport
+    assert client.get("/v1/matches/m_3d_padel/scene3d").json()["court"]["walls"][0]["material"] == "glass"
+    assert any(w["id"] == "front" for w in client.get("/v1/matches/m_3d_squash/scene3d").json()["court"]["walls"])
+    tt = client.get("/v1/matches/m_3d_table_tennis/scene3d").json()
+    assert tt["court"]["view3d"]["plane_height_m"] == 0.76
+    zs = [s[3] for f in tt["flights"] for s in f["samples"]]
+    assert zs and min(zs) >= 0.76 - 1e-6 and max(zs) < 0.76 + 1.0                              # the ball flies above the table top, not the floor

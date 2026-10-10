@@ -56,3 +56,5 @@ shots:
   groundstroke: {bounce_before_hit: true}
 audio: {band_hz: [1500, 10000], min_gap_s: 0.4, contact_height_m: 1.0}   # hit-onset detector (4.4)
 capture: {min_fps: 60, recommended_fps: 120, camera: "behind baseline, 4-6 m high, centred"}
+view3d:
+  surface: {out: "#2f6b4f", inner: "#2b5f95", line: "#ffffff"}      # a hard court: blue inside the lines, green around

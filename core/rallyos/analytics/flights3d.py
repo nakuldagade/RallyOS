@@ -82,6 +82,9 @@ def reconstruct(events: list[dict], fps: float, cfg: dict, frames: list[dict] | 
     proj = cfg["projectile"]
     vt = proj.get("terminal_velocity_mps") if proj.get("motion_model") == "quadratic_drag" else None
     bounces = bool(proj.get("bounces"))
+    view = cfg.get("view3d") or {}
+    plane_z = float(view.get("plane_height_m") or 0.0)           # a table top is above the floor; heights below are relative to it
+    fixed_contact = view.get("contact_above_plane_m")             # a sport whose contact height does not depend on the pose
     v_max = proj.get("speed_range_kmh", [1, 1000])[1] / 3.6
     by_rally: dict[int, list[dict]] = {}
     for e in events:
@@ -99,8 +102,8 @@ def reconstruct(events: list[dict], fps: float, cfg: dict, frames: list[dict] | 
             d = math.dist(start, end)
             if d < MIN_DIST_M or T < MIN_FLIGHT_S or T > MAX_FLIGHT_S:
                 continue
-            h0 = _contact(a, frames, fps)[0]
-            h1 = LANDING_HEIGHT[0] if nxt["type"] == "landing" else _contact(far, frames, fps)[0]
+            h0 = fixed_contact[0] if fixed_contact else _contact(a, frames, fps)[0]
+            h1 = LANDING_HEIGHT[0] if nxt["type"] == "landing" else (fixed_contact[0] if fixed_contact else _contact(far, frames, fps)[0])
             n = max(2, int(round(T * SAMPLE_HZ)))
             kind, heights, fracs = "estimate", None, None
             sol = solve_launch(d, T, h1 - h0, vt) if vt else None
@@ -120,11 +123,11 @@ def reconstruct(events: list[dict], fps: float, cfg: dict, frames: list[dict] | 
                 fracs = [i / n for i in range(n + 1)]
             ax, ay = start
             bx, by = end
-            samples = [[round(a["t"] + T * i / (len(heights) - 1), 3), round(ax + (bx - ax) * f, 3), round(ay + (by - ay) * f, 3), round(max(0.0, z), 3)]
+            samples = [[round(a["t"] + T * i / (len(heights) - 1), 3), round(ax + (bx - ax) * f, 3), round(ay + (by - ay) * f, 3), round(max(0.0, float(z)) + plane_z, 3)]
                        for i, (f, z) in enumerate(zip(fracs, heights))]
             flights.append({"rally_idx": a["rally_idx"], "track_id": a.get("track_id"), "t0": round(a["t"], 3), "t1": round(nxt["t"], 3),
                             "kind": kind, "receiver_inferred": inferred, "from": samples[0][1:], "to": samples[-1][1:], "samples": samples,
-                            "peak_z": round(max(s[3] for s in samples), 2), "shot": a.get("shot"),
+                            "peak_z": round(max(s[3] for s in samples) - plane_z, 2), "shot": a.get("shot"),
                             "speed_kmh": a.get("speed_kmh") if kind == "physics" else None, "speed_err_pct": a.get("speed_err_pct") if kind == "physics" else None})
     flights.sort(key=lambda f: f["t0"])
     return flights
