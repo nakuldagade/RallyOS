@@ -16,7 +16,7 @@ This file is the single source of truth for the project. The product and build p
 9. **Environment:** Windows 11. Python 3.11, Node 18+. Use paths that work on Windows. Download model weights ahead of time; don't depend on venue Wi-Fi.
 10. **Testing:** unit-test the scoring rules for every sport and the court-template fitting (on computer-generated courts with a known H). Follow §20 to verify the full system.
 11. **One machine, CPU first.** Everything runs locally on this laptop. Code must still run on CUDA too if a GPU is ever available: never hard-code `cuda`; pick the device with `rallyos.device.get_device()`.
-12. **Keep the "Build status and next steps" section below current.** At the end of every work block, move finished items to done, record measured numbers, list new limits, and re-order the next steps. Never mark something done that has only been tested on generated data without saying so.
+12. **Keep this file current after EVERY change, automatically, without being asked.** Whenever anything changes (a feature, a fix, a config or env variable, a measurement, a dependency), update this file in the same work block and commit it with the change: the build status and phase rows, measured numbers, known limits, env vars (and `.env.example`), the tests line, and the order of next steps. Move finished items to done, and never mark something done that has only been tested on generated data, with fakes or with a fake camera without saying so. Mention the update in one line when you report the work.
 
 ## Development setup: one laptop
 
