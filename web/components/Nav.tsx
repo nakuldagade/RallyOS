@@ -9,6 +9,8 @@ const SECTIONS: { title: string; links: { href: string; label: string }[] }[] = 
   { title: "Analyse", links: [
     { href: "/", label: "Home" },
     { href: "/upload", label: "Analyse a match" },
+    { href: "/capture", label: "Record live" },
+    { href: "/live/demo", label: "Live replay demo" },
     { href: "/matches", label: "Matches" },
   ] },
   { title: "Improve", links: [

@@ -7,7 +7,7 @@ from fastapi.staticfiles import StaticFiles
 
 from api.config import settings
 from api.db import backend, create_all
-from api.routers import (calibrate, coach, courts, disputes, matches, network, players, sports,
+from api.routers import (calibrate, coach, courts, disputes, live, matches, network, players, sports,
                          tournaments, videos)
 
 
@@ -20,7 +20,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="RallyOS API", version="1.0", lifespan=lifespan)
 app.add_middleware(CORSMiddleware, allow_origins=settings.cors_origins, allow_methods=["*"], allow_headers=["*"])
 
-for r in (calibrate, videos, matches, disputes, players, coach, network, courts, tournaments, sports):
+for r in (calibrate, videos, live, matches, disputes, players, coach, network, courts, tournaments, sports):
     app.include_router(r.router, prefix="/v1")
 
 app.mount("/media", StaticFiles(directory=str(settings.media_dir)), name="media")
