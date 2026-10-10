@@ -4,7 +4,7 @@ import Link from "next/link";
 import { api } from "@/lib/api";
 import { useApi } from "@/lib/useApi";
 import { Card, ErrorBox, Loading } from "@/components/ui";
-import MatchList from "@/components/match/MatchList";
+import ManageMatches from "@/components/match/ManageMatches";
 
 const FEATURES = [
   { href: "/sports", title: "Court Fingerprint", text: "Detects the sport from the court lines and calibrates the camera. Six sports, one YAML each, no training." },
@@ -37,7 +37,7 @@ export default function Home() {
 
       <div className="grid gap-6 lg:grid-cols-[1fr_340px]">
         <Card title="Recent matches" actions={<Link href="/matches" className="text-xs text-accent">All matches →</Link>}>
-          {matches.loading ? <Loading /> : matches.error ? <ErrorBox message={matches.error} onRetry={matches.reload} /> : <MatchList matches={matches.data ?? []} />}
+          {matches.loading ? <Loading /> : matches.error ? <ErrorBox message={matches.error} onRetry={matches.reload} /> : <ManageMatches matches={matches.data ?? []} onChanged={matches.reload} />}
         </Card>
         <Card title="What's real in this demo">
           <ul className="space-y-2 text-sm">

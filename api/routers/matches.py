@@ -3,13 +3,14 @@ import shutil
 import time
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 from sqlmodel import Session, select
 
 from api.config import settings
 from api.db import get_session
 from api.models import Match
 from api.schemas import MatchJSON, MatchSummary, Recalibrate, ScoreConfirm
-from api.services import jobs, rating, store
+from api.services import jobs, matches_admin, rating, store
 
 router = APIRouter(tags=["matches"])
 
@@ -109,3 +110,26 @@ def recalibrate(match_id: str, body: Recalibrate, session: Session = Depends(get
         override.rename(override.with_suffix(f".json.bak-{int(time.time())}"))
     names = {p["track_id"]: p["name"] for p in data.get("players", []) if p.get("name")}
     return {"job_id": jobs.submit(video, sport, body.taps, names, match_id=match_id)}
+
+
+class DeleteMatches(BaseModel):
+    ids: list[str]
+
+
+@router.delete("/matches/{match_id}")
+def delete_one(match_id: str, session: Session = Depends(get_session)):
+    """Remove an analysed match and its files (the original upload and the ratings are kept; the demo match is protected)."""
+    try:
+        return matches_admin.delete_match(session, match_id)
+    except PermissionError as exc:
+        raise HTTPException(403, str(exc)) from None
+    except KeyError:
+        raise HTTPException(404, f"match {match_id} not found") from None
+
+
+@router.post("/matches/delete")
+def delete_many(body: DeleteMatches, session: Session = Depends(get_session)):
+    """Remove several matches at once; reports which were deleted and which were skipped (and why)."""
+    if not body.ids:
+        raise HTTPException(400, "no match ids given")
+    return matches_admin.delete_matches(session, body.ids)

@@ -107,6 +107,8 @@ export const api = {
     fd.append("sport", sport);
     return request<CourtDetection>("/v1/calibrate", { method: "POST", body: fd });
   },
+  deleteMatches: (ids: string[]) =>
+    request<{ deleted: { match_id: string }[]; skipped: { match_id: string; reason: string }[] }>("/v1/matches/delete", post({ ids })),
   recalibrate: (id: string, taps: [number, number][], sport?: string) =>
     request<{ job_id: string }>(`/v1/matches/${q(id)}/recalibrate`, post({ taps, sport })),
 };
