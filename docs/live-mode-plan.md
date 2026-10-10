@@ -56,3 +56,10 @@ web/
 Every live number is `provisional: true` until `finalize()` recomputes it over the whole match (including the split-step
 pass, dispute clips and the full-video checks). The status section of AGENTS.md says what was proven on a real camera
 (only phase G can) and what was only replayed or generated.
+
+## Findings so far (updated per phase)
+
+* **Phase B:** chunks are decoded by OpenCV correctly whether MP4 or WebM (frame count and 25 fps exact). Re-encoding a clip
+  (chunks are separate recordings) removes the weakest hits and lowers shuttle detection by 4-5 points, so the capture page
+  must request a high recording bitrate. Analysing a chunk takes 1.4-1.9x its length with pose at 1280 px: phase F is
+  needed before this keeps up with real time. The first chunk also pays for loading the pose model.

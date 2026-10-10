@@ -393,14 +393,15 @@ def movement_note() -> dict:
 
 def make_match(scene: Scene, *, match_id: str, video: dict, players_meta: list, tracks_url: str, rallies: list, events: list,
                score: dict, disputes: list, per_player: dict, raw: list, balls: list, hits: list, speed_summary, split_note: str,
-               shot_summary, audio_info: dict, pipeline: dict, insights: list | None = None, title=None) -> dict:
+               shot_summary, audio_info: dict, pipeline: dict, insights: list | None = None, title=None,
+               live: dict | None = None) -> dict:
     """The §11.3 match.json dictionary (batch and live build it the same way)."""
     from rallyos.export import ball_stats
 
     rally_hits = [r["hits"] for r in rallies]
     auto = scene.auto
     return {
-        "schema_version": "1.0", "match_id": match_id, "title": title, "sport": scene.sport,
+        "schema_version": "1.1", "match_id": match_id, "title": title, "sport": scene.sport,
         "sport_confidence": auto["sport_confidence"] if auto and scene.sport == auto["sport"] else None,
         "sport_source": "chosen by user" if scene.sport_given else
                         ("auto-detected (Court Fingerprint)" if auto and scene.sport == auto["sport"] else "default (not detected)"),
@@ -419,6 +420,7 @@ def make_match(scene: Scene, *, match_id: str, video: dict, players_meta: list, 
             "pipeline": pipeline,
         },
         "disputes": disputes, "insights": insights or [],
+        **({"live": live} if live else {}),
     }
 
 

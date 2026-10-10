@@ -73,7 +73,7 @@ class InsightOut(_Loose):
 
 
 class MatchJSON(_Loose):
-    schema_version: str = "1.0"
+    schema_version: str = "1.1"
     match_id: str
     sport: str
     sport_confidence: Optional[float] = None

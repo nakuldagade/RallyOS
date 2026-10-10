@@ -72,19 +72,32 @@ Status key: ✅ done and verified · 🟡 built but only partly proven (see the 
 | **B8 Live mode** (continuous capture, 5-second chunks; plan in `docs/live-mode-plan.md`) | 🟡 | In progress: see the phase table "Live mode: phases A to G" below. Baseline before any live work: 30.2 s to analyse a 9.96 s clip (real-time factor 3.03); the live target is under 0.6 |
 | **B7 Multi-sport + SDK** | 🟡 | `pip install -e core/`, `developers` page, `sports` page with YAML viewer, RacketVision plug-in (precomputed results). The court fingerprint recognises all 6 templates on generated courts and found a real table-tennis table. 🟡 No full real run yet on tennis / pickleball / padel / squash video. ❌ `volleyball.yaml` stub |
 
-Tests: `pytest` runs `core/tests` + `api/tests` (204 passing, 1 skipped on SQLite, about 1–2 minutes; the court-fit tests are the slow ones). API tests also run on Postgres: set `RALLYOS_TEST_DATABASE_URL` to a database whose name contains `test` (it is wiped), e.g. a local `pgserver` instance. The web app passes `tsc --noEmit`.
+Tests: `pytest` runs `core/tests` + `api/tests` (217 passing, 1 skipped on SQLite, about 1–2 minutes; the court-fit tests are the slow ones). API tests also run on Postgres: set `RALLYOS_TEST_DATABASE_URL` to a database whose name contains `test` (it is wiped), e.g. a local `pgserver` instance. The web app passes `tsc --noEmit`.
 
 ### Live mode: phases A to G (update the row of each phase when it is finished; say what was proven on a real camera)
 
 | Phase | What | Status | Proven on |
 |---|---|---|---|
 | **A** | Event contract (SSE), per-session event log, mock replay producer, live dashboard `/live/demo`, match-page layout rebalanced | ✅ built | a processed match replayed through the real API and SSE; no camera |
-| **B** | `stages.py` (shared stages) + `StreamAnalyzer` + `python -m rallyos.live.replay` + equivalence test against the whole-file run | 🟡 in progress. The `stages.py` refactor is done: all nine output files identical before and after on a real clip | a real clip, whole file only so far |
+| **B** | `stages.py` (shared stages) + `StreamAnalyzer` (`core/rallyos/live/`) + `python -m rallyos.live.replay` + equivalence test | ✅ built and tested; **not real-time yet** (see numbers below) | a real broadcast clip replayed as 2 chunks; generated clips for the logic tests; no camera |
 | **C** | Real session API (create, sign, chunks, stop, SSE), ordered worker queue, local storage, finalise + import | ❌ | |
 | **D** | Browser segmenter (two staggered MediaRecorders), IndexedDB outbox, `/capture` page, wake lock | ❌ | |
 | **E** | Cloudinary signed uploads, final stitch + upload, `match.json` schema 1.1 with the `live` block | ❌ | |
 | **F** | Speed work with measured numbers (court reuse, ROI gating, adaptive stride / width, ONNX, overlapped decode, graceful degradation) | ❌ | |
 | **G** | Real phone test (mobile Chrome and Safari) | ❌ cannot be done without a phone on the court | |
+
+### Live mode: what phase B measured (real 10 s broadcast clip, this laptop, pose at 1280, corners given)
+
+| | Whole file (batch) | Live: 2 chunks of 5 s (+0.5 s overlap), then finalise |
+|---|---|---|
+| Time to analyse | 26.9-30.2 s (real-time factor 2.7-3.0) | chunk 0: 9.3-10.7 s (factor 1.8-1.9, includes loading the pose model), chunk 1: 6.3-6.6 s (factor 1.4-1.5); finalise 4.2 s |
+| Lag, chunk finished → results | n/a | 10-12 s in real time, and growing: a factor above 1 means the backlog never clears (phase F) |
+| Court | the corners given | identical homography (calibrated once, from the first chunk) |
+| Hits | 9 (original file) | 7; a whole-file run on the *same re-encoded video* finds 6 (+1 at the end in the live run): **video compression, not chunking, removes the two weakest hits (2.72 s, 3.16 s) and cuts shuttle detection from 69.1% to 63.9-65.5% of frames** |
+| Rallies | 1 rally, 9 hits, ended "landing implausible" | the same single rally, 7 hits, the same end reason |
+| What this means for capture | | the browser's recording bitrate bounds shuttle detection: the capture page must ask for a high bitrate (8 Mbit/s or more at 1080p) |
+
+Exact equivalence is asserted in `core/tests/test_live_stream.py` on a generated clip written as MJPG (identical frames in chunks and whole file): same hits within 0.12 s, same rallies and end reasons, same homography, ball detection within 2%.
 
 ### Measured so far (honest numbers, for the pitch and Q&A)
 
