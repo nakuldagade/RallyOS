@@ -85,3 +85,29 @@ def test_booking_and_tournament(client):
     client.post("/v1/tournaments/1/register", json={"player_id": "p_rohan"})
     draw = client.post("/v1/tournaments/1/draw")
     assert draw.status_code == 200 and draw.json()[0]["p1"] in {"p_anika", "p_rohan"}
+
+
+def test_ball_only_clip_import(client, tmp_path):
+    """A RacketVision-style clip (ball track only, no players/calibration) imports and serves cleanly."""
+    from sqlmodel import Session
+
+    from api.db import engine
+    from api.services.importer import import_folder
+    from rallyos.export import ball_only_match, write_outputs
+
+    balls = [{"px": [500.0 + 2 * i, 300.0 + 10 * i], "court": None, "conf": 0.9, "interp": False} for i in range(15)]
+    balls += [{"px": [530.0 + 4 * i, 450.0 - 30 * i + 0.6 * i * i], "court": None, "conf": 0.9, "interp": False} for i in range(30)]
+    match, tracks = ball_only_match(match_id="rv_test_000", title="RacketVision clip · test", sport="badminton", balls=balls,
+                                    fps=25, width=1920, height=1080, video_src=None, sha256=None,
+                                    tracker={"tracker": "racketvision"})
+    folder = write_outputs(tmp_path / "rv_test_000", match, tracks)
+    with Session(engine) as s:
+        assert import_folder(folder, s) == "rv_test_000"
+
+    m = client.get("/v1/matches/rv_test_000").json()
+    assert m["players"] == [] and m["stats"]["ball"]["tracker"] == "racketvision" and m["events"]
+    assert len(client.get("/v1/matches/rv_test_000/tracks").json()["frames"]) == 45
+    summary = next(x for x in client.get("/v1/matches").json() if x["match_id"] == "rv_test_000")
+    assert summary["title"] == "RacketVision clip · test" and summary["ball_tracker"] == "racketvision"
+    rep = client.get("/v1/matches/rv_test_000/report").json()
+    assert rep["insights"] == [] and rep["note"]

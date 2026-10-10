@@ -20,14 +20,30 @@ def _safe_name(filename: str | None) -> str:
     return re.sub(r"[^A-Za-z0-9._-]", "_", name) or "video.mp4"
 
 
+def _parse_taps(taps: str | None) -> list | None:
+    if not taps:
+        return None
+    try:
+        pts = json.loads(taps)
+        if len(pts) != 4 or any(len(p) != 2 for p in pts):
+            raise ValueError
+        return [[float(x), float(y)] for x, y in pts]
+    except (ValueError, TypeError):
+        raise HTTPException(400, "taps must be JSON [[x,y],[x,y],[x,y],[x,y]]: near-left, near-right, far-right, far-left") from None
+
+
 @router.post("/videos", status_code=202)
-async def upload(video: UploadFile = File(...), sport: str = Form("auto")):
+async def upload(video: UploadFile = File(...), sport: str = Form("auto"), taps: str | None = Form(None),
+                 near_name: str | None = Form(None), far_name: str | None = Form(None)):
+    """Upload a clip. Optional `taps` = the 4 outer court corners in video pixels (4-tap calibration)."""
+    pts = _parse_taps(taps)
+    names = {k: v.strip()[:40] for k, v in ((1, near_name), (2, far_name)) if v and v.strip()}
     up = settings.media_dir / "uploads"
     up.mkdir(parents=True, exist_ok=True)
     dest = up / f"{uuid.uuid4().hex[:8]}_{_safe_name(video.filename)}"
     with dest.open("wb") as f:
         shutil.copyfileobj(video.file, f)
-    return {"job_id": jobs.submit(dest, sport)}
+    return {"job_id": jobs.submit(dest, sport, pts, names)}
 
 
 @router.get("/jobs/{job_id}")

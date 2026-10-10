@@ -1,11 +1,14 @@
 # Videos, outputs, media (move via shared drive, never git)
 demo/**/*.mp4
 demo/out/
+demo/racketvision/
 media/
 data/runtime/
 third_party/
 
 # Model weights (downloaded pretrained only)
+models/
+*.onnx
 *.pt
 *.pth
 
@@ -25,3 +28,4 @@ __pycache__/
 node_modules/
 .next/
 web/.env.local
+*.tsbuildinfo

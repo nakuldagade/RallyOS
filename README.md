@@ -41,9 +41,29 @@ python -m api.import_match demo/out/<clip>/   # import a finished pipeline outpu
 cd web; npm install; npm run dev
 ```
 
-Pipeline (once implemented): `python -m rallyos.pipeline <clip.mp4> --device auto --out demo/out/<clip>/`.
+Analyse your own video: open http://localhost:3000/upload, pick a clip, tap the 4 court corners, upload.
+Or from the command line (taps = near-left, near-right, far-right, far-left in video pixels):
+`python -m rallyos.pipeline clip.mp4 --sport badminton --taps "[[330,948],[1583,948],[1253,333],[638,333]]" --out demo/out/clip/`
+This version tracks players + pose (pretrained YOLO11n-pose), the shuttle (geometric, no trained detector), hits and rallies.
+Not built yet: audio onsets, shot types, speeds, line calls, automatic score (the score is confirmed by a person).
 Device is chosen by `rallyos.device.get_device()` (`RALLYOS_DEVICE=auto|cpu|cuda`), so the same code runs on CPU and CUDA.
 
 Regenerate the mock tracks: `python data/mock/make_mock_tracks.py`.
 
 The AI coach uses Claude only when `ANTHROPIC_API_KEY` is set; every number it writes is checked against the stats JSON. Without a key (or offline) it falls back to templated insights. `GET /v1/matches/{id}/report?source=claude|template` forces a source.
+
+### Optional ball tracker: RacketVision (inference only)
+
+The pretrained RacketVision TrackNetV3 checkpoint runs on the GPU machine in its own venv; nothing is trained.
+Its CSV output plugs into the same `match.json` / `tracks.json` contract (badminton, table tennis, tennis):
+
+```powershell
+# results from the GPU runner, unzipped into demo/racketvision/extracted/ (git-ignored)
+python -m rallyos.track.plugins.racketvision list  demo/racketvision/extracted/balltrack_badminton_test_predictions.csv
+python -m rallyos.track.plugins.racketvision build demo/racketvision/extracted/balltrack_badminton_test_predictions.csv --clip match117_000 --video demo/racketvision/videos/match117_000.mp4
+python -m api.import_match demo/out/rv_match117_000/
+# GPU machine, new video:  python -m rallyos.track.plugins.racketvision run clip.mp4 --out demo/out/rv_clip/
+```
+
+Reference accuracy (RacketVision badminton test set, 46 broadcast clips, measured on the runner): precision 0.91, recall 0.87, F1 0.89.
+Not yet measured on our own phone footage.

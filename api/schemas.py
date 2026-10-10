@@ -91,6 +91,7 @@ class MatchJSON(_Loose):
 
 class MatchSummary(BaseModel):
     match_id: str
+    title: Optional[str] = None
     sport: str
     status: str = "processed"
     players: list[str] = []
@@ -101,6 +102,7 @@ class MatchSummary(BaseModel):
     duration_s: Optional[float] = None
     rallies: int = 0
     sha256: Optional[str] = None
+    ball_tracker: Optional[str] = None              # e.g. "racketvision" when the shuttle came from the plug-in
 
 
 class ScoreConfirm(BaseModel):
@@ -120,3 +122,4 @@ class CoachReport(BaseModel):
     match_id: str
     source: str                     # "pipeline" | "claude" | "template"
     insights: list[ReportInsight]
+    note: Optional[str] = None      # why a report is empty, e.g. no player stats yet

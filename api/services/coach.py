@@ -191,5 +191,9 @@ def build_report(data: dict, prefer: str = "auto") -> dict:
             good = []
     if not good:
         good, source = template_insights(data), "template"
-    return {"match_id": data["match_id"], "source": source,
+    note = None
+    if not good and not data.get("stats", {}).get("per_player"):
+        note = ("No player stats in this match yet (e.g. a ball-only clip), so there is nothing to coach from. "
+                "Insights appear once players and pose are tracked.")
+    return {"match_id": data["match_id"], "source": source, "note": note,
             "insights": [{**i, "grounded": True} for i in good]}
