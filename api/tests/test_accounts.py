@@ -13,21 +13,27 @@ from api.config import settings
 from api.db import engine
 from api.main import app
 from api.models import Match
-from api.seed import DEMO_PASSWORD, main as seed
+from api.seed import main as seed, seed_accounts
 from api.services import auth
 from api.services.importer import import_folder
 
 W, L = 6.1, 13.4
 
 
+PASSWORDS: dict[str, str] = {}
+
+
 @pytest.fixture(scope="module")
 def client():
-    seed()
+    seed()                                                         # creates the demo accounts with random passwords
+    with Session(engine) as s:
+        PASSWORDS.update(seed_accounts(s, reset=True))             # a known set for this run
     with TestClient(app) as c:
         yield c
 
 
-def login(client, email, role=None, password=DEMO_PASSWORD):
+def login(client, email, role=None, password=None):
+    password = password or PASSWORDS.get(email, "")
     r = client.post("/v1/auth/login", json={"email": email, "password": password, **({"role": role} if role else {})})
     return r
 
@@ -91,6 +97,19 @@ def test_a_player_and_a_coach_log_in_and_the_token_says_who_they_are(client):
     assert c.status_code == 200 and c.json()["user"]["role"] == "coach" and c.json()["user"]["player_id"] is None
     me = client.get("/v1/auth/me", headers={"Authorization": f"Bearer {p.json()['token']}"})
     assert me.status_code == 200 and me.json()["email"] == "anika@rallyos.demo"
+
+
+def test_there_is_no_fixed_demo_password(client):
+    assert len(PASSWORDS) == 7 and len(set(PASSWORDS.values())) == 7 and all(len(p) >= 12 for p in PASSWORDS.values())   # each its own, random
+    assert login(client, "anika@rallyos.demo", password="rallyos-demo").status_code == 401                              # the old public one is gone
+    saved = (settings.runtime_dir / "demo_accounts.txt").read_text(encoding="utf-8")
+    assert all(f"{e}\t{pw}" in saved for e, pw in PASSWORDS.items())
+    with Session(engine) as s:
+        again = seed_accounts(s, reset=True)
+    assert again["anika@rallyos.demo"] != PASSWORDS["anika@rallyos.demo"]
+    assert login(client, "anika@rallyos.demo", password=PASSWORDS["anika@rallyos.demo"]).status_code == 401           # the old one stopped working
+    PASSWORDS.update(again)
+    assert login(client, "anika@rallyos.demo").status_code == 200
 
 
 def test_wrong_password_unknown_email_and_the_wrong_door_are_refused(client):

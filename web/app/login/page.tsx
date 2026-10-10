@@ -75,8 +75,10 @@ export default function LoginPage() {
           </div>
         </form>
         <div className="mt-4 rounded-lg bg-fg/5 p-3 text-xs text-muted">
-          Demo accounts (password <code>rallyos-demo</code>): <button type="button" className="text-accent" onClick={() => { setMode("login"); setEmail(COPY[role].email); setPassword("rallyos-demo"); }}>
-            fill in {COPY[role].email}</button>. Players: anika, rohan, meera, kabir, isha @rallyos.demo. Coaches: coach.vikram (Anika, Rohan, Kabir) and coach.neha (Meera, Isha) @rallyos.demo.
+          Demo accounts have random passwords, created when the server's database is seeded (<code>python -m api.seed</code>) and saved in
+          <code> data/runtime/demo_accounts.txt</code> on this machine; <code>python -m api.seed --reset-passwords</code> makes new ones.
+          Players: anika, rohan, meera, kabir, isha @rallyos.demo. Coaches: coach.vikram (Anika, Rohan, Kabir) and coach.neha (Meera, Isha) @rallyos.demo.{" "}
+          <button type="button" className="text-accent" onClick={() => { setMode("login"); setEmail(COPY[role].email); }}>Fill in {COPY[role].email}</button>
         </div>
       </Card>
     </div>
