@@ -13,6 +13,7 @@ const SECTIONS: { title: string; links: { href: string; label: string }[] }[] = 
     { href: "/capture", label: "Record live" },
     { href: "/live/demo", label: "Live replay demo" },
     { href: "/matches", label: "Matches" },
+    { href: "/highlights", label: "Highlights" },
   ] },
   { title: "Improve", links: [
     { href: "/players", label: "Players" },

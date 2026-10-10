@@ -5,6 +5,7 @@ import { api } from "@/lib/api";
 import { useApi } from "@/lib/useApi";
 import { Card, ErrorBox, Loading } from "@/components/ui";
 import ManageMatches from "@/components/match/ManageMatches";
+import HighlightGrid from "@/components/match/HighlightGrid";
 
 const FEATURES = [
   { href: "/sports", title: "Court Fingerprint", text: "Detects the sport from the court lines and calibrates the camera. Six sports, one YAML each, no training." },
@@ -47,6 +48,10 @@ export default function Home() {
           </ul>
         </Card>
       </div>
+
+      <Card title="Best shots" actions={<Link href="/highlights" className="text-xs text-accent">All highlights →</Link>}>
+        <HighlightGrid limit={3} />
+      </Card>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {FEATURES.map((f) => (

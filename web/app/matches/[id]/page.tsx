@@ -23,6 +23,7 @@ import InsightCard from "@/components/coach/InsightCard";
 import AudioCard from "@/components/match/AudioCard";
 import BallTrackingCard from "@/components/match/BallTrackingCard";
 import AssignPlayers from "@/components/match/AssignPlayers";
+import HighlightCard from "@/components/match/HighlightCard";
 
 type Tab = "stats" | "shots" | "events" | "insights";
 
@@ -111,6 +112,8 @@ function MatchVision() {
       </div>
 
       {!match.data?.mock && <AssignPlayers matchId={m.match_id} players={m.players} onSaved={match.reload} />}
+
+      {m.highlight && <HighlightCard match={m} onWatchFull={goto} />}
 
       {/* Row 1: the replay and the result of the match */}
       <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">

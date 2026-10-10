@@ -3,7 +3,7 @@
 // when the backend is unreachable, so the demo never shows a blank page.
 import { getToken } from "./auth";
 import type {
-  AuthUser, Booking, CoachDashboard, PlayerAnalysis, CourtDetection, CoachReport, CourtRow, DisputeDetail, DrawMatch, Health, MatchJSON, MatchSummary, Player,
+  AuthUser, Booking, CoachDashboard, HighlightItem, PlayerAnalysis, CourtDetection, CoachReport, CourtRow, DisputeDetail, DrawMatch, Health, MatchJSON, MatchSummary, Player,
   Prediction, RatingPoint, Score, SportConfig, Suggestion, Tournament, Tracks,
 } from "./types";
 
@@ -72,6 +72,7 @@ const post = (body?: unknown): RequestInit =>
 const q = encodeURIComponent;
 
 export const api = {
+  highlights: () => request<{ highlights: HighlightItem[]; matches_without: number }>("/v1/highlights"),
   login: (email: string, password: string, role: "player" | "coach") =>
     request<{ token: string; user: AuthUser }>("/v1/auth/login", post({ email, password, role })),
   registerAccount: (body: { name: string; email: string; password: string; role: "player" | "coach" }) =>

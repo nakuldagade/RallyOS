@@ -177,14 +177,16 @@ class Analyzer:
             video=video, detector=detector, device=self.device, emit=emit)
 
         # -- render ---------------------------------------------------------------------------------------
-        emit("render", 0.0, "writing the match record")
+        emit("render", 0.0, "cutting the best-shot highlight")
+        highlight = stages.make_highlight(video, out, match_id, per_player, events, balls, fps, frames)
+        emit("render", 0.5, "writing the match record")
         match = stages.make_match(
             scene, match_id=match_id,
             video={"src": f"/media/{match_id}/source.mp4", "overlay": None, "fps": fps, "width": W, "height": Hh,
                    "duration_s": duration, "sha256": sha256_file(video)},
             players_meta=players_meta, tracks_url=f"/media/{match_id}/tracks.json", rallies=rallies, events=events,
             score=score, disputes=disputes, per_player=per_player, raw=raw, balls=balls, hits=hits,
-            speed_summary=speed_summary, split_note=split_note, shot_summary=shot_summary, audio_info=audio_info,
+            speed_summary=speed_summary, split_note=split_note, shot_summary=shot_summary, audio_info=audio_info, highlight=highlight,
             pipeline={"device": self.device, "imgsz": self.imgsz, "imgsz_basis": pose_note, "player_stride": self.stride,
                       "players_backend": pose_backend if detector is not None else None,
                       "static_people_ignored": tracker.statics, "ignored_detections": tracker.ignored_counts,

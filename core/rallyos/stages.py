@@ -467,7 +467,7 @@ def movement_note() -> dict:
 def make_match(scene: Scene, *, match_id: str, video: dict, players_meta: list, tracks_url: str, rallies: list, events: list,
                score: dict, disputes: list, per_player: dict, raw: list, balls: list, hits: list, speed_summary, split_note: str,
                shot_summary, audio_info: dict, pipeline: dict, insights: list | None = None, title=None,
-               live: dict | None = None) -> dict:
+               live: dict | None = None, highlight: dict | None = None) -> dict:
     """The §11.3 match.json dictionary (batch and live build it the same way)."""
     from rallyos.export import ball_stats
 
@@ -494,7 +494,33 @@ def make_match(scene: Scene, *, match_id: str, video: dict, players_meta: list, 
         },
         "disputes": disputes, "insights": insights or [],
         **({"live": live} if live else {}),
+        **({"highlight": highlight} if highlight else {}),
     }
+
+
+def make_highlight(video, out: Path, match_id: str, per_player: dict, events: list[dict], balls: list, fps: float,
+                   frames: list[dict] | None = None) -> dict | None:
+    """The match highlight: an ~8 s clip around the best rated shot of both players (render/highlight.py). Returns the match.json
+    "highlight" block, or None when no shot could be rated or the clip could not be written (a missing clip never breaks a run)."""
+    from rallyos.render.highlight import pick_best, render_highlight
+
+    best = pick_best(per_player, events)
+    if best is None:
+        return None
+    if best.get("px") and frames:                         # the contact ring is only drawn where the hitter really is
+        fr = frames[min(max(0, round(best["t"] * fps)), len(frames) - 1)]
+        box = next((p.get("bbox") for p in fr["players"] if p["track_id"] == best["track_id"]), None)
+        if box:
+            w, h = box[2] - box[0], box[3] - box[1]
+            x, y = best["px"]
+            if not (box[0] - 0.6 * w <= x <= box[2] + 0.6 * w and box[1] - 0.6 * h <= y <= box[3] + 0.6 * h):
+                best["px"] = None
+    info = render_highlight(video, Path(out) / "highlight.mp4", best, fps, balls)
+    if info is None:
+        return None
+    return {"clip_url": f"/media/{match_id}/highlight.mp4", **info, "track_id": best["track_id"], "t": best["t"], "shot": best.get("shot"),
+            "score": best["score"], "outcome": best["outcome"], "technique": best.get("technique"), "confidence": best["confidence"],
+            "why": best["why"], "basis": best["basis"]}
 
 
 def stage_clock() -> tuple[dict, Callable]:

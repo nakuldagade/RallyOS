@@ -199,6 +199,33 @@ export interface BestShot {
   basis?: string;                    // "outcome" or "technique only: ..."
 }
 
+/** The best shot of the whole match as an ~8 s clip (match.json "highlight"); absent when no shot could be rated. */
+export interface Highlight {
+  clip_url: string;
+  clip_start: number;
+  clip_end: number;
+  duration_s: number;
+  track_id: number;
+  t: number;                         // when the shot was hit, in the full video
+  shot: string | null;
+  score: number;
+  outcome: "winner" | "forced_error" | "kept_going" | "unknown" | "error";
+  technique: number | null;
+  confidence: number;
+  why: string;
+  basis: string;                     // "outcome" or "technique only: ..."
+}
+
+export interface HighlightItem {
+  match_id: string;
+  date: string;
+  sport: string | null;
+  duration_s: number | null;
+  players: (string | null)[];
+  best_player: string | null;
+  highlight: Highlight;
+}
+
 export interface MatchJSON {
   schema_version: string;
   match_id: string;
@@ -207,6 +234,7 @@ export interface MatchJSON {
   sport_confidence?: number | null;
   video: VideoInfo;
   live?: LiveBlock | null;
+  highlight?: Highlight | null;
   calibration: Calibration;
   players: PlayerRef[];
   tracks_url?: string | null;

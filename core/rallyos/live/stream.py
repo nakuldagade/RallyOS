@@ -472,6 +472,7 @@ class StreamAnalyzer:
             players_meta=players_meta, tracks_url=f"/media/{match_id}/tracks.json", rallies=rallies, events=events, score=score,
             disputes=disputes, per_player=per_player, raw=raw, balls=balls, hits=hits, speed_summary=speed_summary,
             split_note=split_note, shot_summary=shot_summary, audio_info=audio_info,
+            highlight=stages.make_highlight(video, out, match_id, per_player, events, balls, fps, frames) if render_clips else None,
             pipeline={"device": self.device, "imgsz": self.imgsz, "player_stride": self.stride, "live": True,
                       "players_backend": self.pose_backend if self.detector is not None else None,
                       "static_people_ignored": self.tracker.statics, "ignored_detections": self.tracker.ignored_counts,
