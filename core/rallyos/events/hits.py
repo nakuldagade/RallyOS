@@ -65,7 +65,7 @@ def trajectory_hits(balls: list[dict | None], fps: float, width: int = REF_WIDTH
             continue
         frame = a if gap == 0 else (a + b) // 2
         px = list(pos[a]) if gap == 0 else [round((pos[a][0] + pos[b][0]) / 2, 1), round((pos[a][1] + pos[b][1]) / 2, 1)]
-        conf = min(0.9, 0.45 + dv / 250.0) * min(balls[a]["conf"], balls[b]["conf"]) ** 0.25 * (1 - 0.04 * gap)
+        conf = min(0.9, 0.45 + dv / 250.0) * min(balls[a]["conf"], balls[b]["conf"]) ** 0.25 * max(0.1, 1 - 0.04 * gap)
         cands.append({"frame": frame, "t": round(frame / fps, 3), "px": px, "dv": round(dv, 1),
                       "turn_deg": round(turn, 1), "confidence": round(conf, 2)})
     hits: list[dict] = []
@@ -109,7 +109,7 @@ def tracklet_hits(balls: list[dict | None], fps: float, width: int = REF_WIDTH, 
         if dv < min_dv or turn < min_turn_deg:
             continue
         frame = (a[-1] + b[0]) // 2
-        conf = min(0.9, 0.45 + dv / 250.0) * (1 - 0.03 * max(0, gap - 1))
+        conf = min(0.9, 0.45 + dv / 250.0) * max(0.1, 1 - 0.03 * max(0, gap - 1))
         hits.append({"frame": frame, "t": round(frame / fps, 3),
                      "px": [round((pb[0] + qa[0]) / 2, 1), round((pb[1] + qa[1]) / 2, 1)],
                      "dv": round(dv, 1), "turn_deg": round(turn, 1), "confidence": round(conf, 2)})

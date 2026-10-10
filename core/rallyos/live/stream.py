@@ -38,6 +38,24 @@ STATICS_EVERY = 12         # re-evaluate which detected people are static offici
 MAX_GAP_FRAMES_FILL = 250  # a gap longer than this (10 s at 25 fps) is filled with empty frames in one go
 
 
+def _pts_fps(path) -> float:
+    """Frame rate of a file with no usable header rate, from the mean rate over the first frames' timestamps."""
+    import cv2
+
+    cap = cv2.VideoCapture(str(path))
+    ts = []
+    while len(ts) < 60:
+        ok, _ = cap.read()
+        if not ok:
+            break
+        ts.append(cap.get(cv2.CAP_PROP_POS_MSEC))
+    cap.release()
+    if len(ts) < 3 or ts[-1] <= ts[0]:
+        return 25.0
+    fps = (len(ts) - 1) / ((ts[-1] - ts[0]) / 1000.0)          # mean rate: robust to jittery per-frame timestamps
+    return float(min(120.0, max(5.0, round(fps))))
+
+
 class StreamAnalyzer:
     def __init__(self, sport: str = "auto", device: str | None = None, taps: list | None = None,
                  names: dict[int, str] | None = None, session_id: str | None = None, out_dir: str | Path | None = None,
@@ -103,9 +121,10 @@ class StreamAnalyzer:
         if not cap.isOpened():
             raise IOError(f"cannot open chunk {path}")
         fps_c = cap.get(cv2.CAP_PROP_FPS)
-        n_header = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        if not 5 <= fps_c <= 120:                                     # browser files can carry no usable frame rate
-            fps_c = (n_header / duration) if duration and n_header > 0 else 25.0
+        # Browser (MediaRecorder) WebM reports 1000 fps and a "frame count" in milliseconds: use the frames' own timestamps
+        use_pts = not 5 <= fps_c <= 120
+        if use_pts:
+            fps_c = _pts_fps(path)
         if self.scene is None:
             self._calibrate(cap, fps_c)
             cap.release()
@@ -113,11 +132,17 @@ class StreamAnalyzer:
         first_g = self.scanner.f
         processed = skipped = 0
         i = 0
+        pos0 = 0.0
         while True:
             ok, frame = cap.read()
             if not ok:
                 break
-            t = meta.t0 + i / fps_c
+            if use_pts:
+                pos = cap.get(cv2.CAP_PROP_POS_MSEC)
+                pos0 = pos if i == 0 else pos0
+                t = meta.t0 + max(0.0, (pos - pos0) / 1000.0)
+            else:
+                t = meta.t0 + i / fps_c
             i += 1
             g = int(round(t * self.fps))
             if g < self.scanner.f:                                    # already seen in the previous chunk's overlap

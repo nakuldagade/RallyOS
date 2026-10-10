@@ -153,7 +153,7 @@ def classify_shots(events: list[dict], frames: list[dict], fps: float, cfg: dict
                 unlabelled += 1
                 reasons[why] += 1
                 continue
-            conf *= hit.get("confidence", 0.6) ** 0.5
+            conf *= max(0.0, hit.get("confidence", 0.6)) ** 0.5
             hit.update(shot=label, shot_conf=round(min(0.9, conf), 2), shot_why=why, shot_features=f,
                        **({"shot_unchecked": unchecked} if unchecked else {}))
             labelled += 1

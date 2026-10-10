@@ -108,3 +108,10 @@ def test_shot_mix_counts_per_player_and_other_sports_use_their_own_zones():
     dink[0]["rally_idx"] = dink[1]["rally_idx"] = 3
     classify_shots(dink, frames(100, 1, 300), 25, pb)
     assert dink[0]["shot"] == "serve"
+
+
+def test_a_hit_with_a_negative_confidence_does_not_crash_the_classifier():
+    # found by a real browser run: an old bridging formula could give a confidence below 0, and `** 0.5` made it complex
+    ev = [hit(1.0, 1, 2.0, conf=-0.77), hit(1.6, 2, 11.0), landing(2.4, 3.0)]
+    classify_shots(ev, frames(100), 25.0, CFG)
+    assert all(e.get("shot_conf") is None or isinstance(e["shot_conf"], float) for e in ev)
