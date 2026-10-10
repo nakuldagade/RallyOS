@@ -230,10 +230,31 @@ class LiveSession:
         out = settings.out_dir / match_id
         with self.alock:
             self.analyzer.finalize(match_id=match_id, out_dir=out)
+        self._publish_video(out)
         with DbSession(engine) as s:
             import_folder(out, s)
         self.match_id, self.state = match_id, "done"
         self.log.emit("finalised", match_id=match_id)
+
+    def _publish_video(self, out) -> None:
+        """Cloudinary storage: upload the stitched match video and record its CDN URL in match.json. A failure here never
+        stops the match from being finalised: the local copy is the source of truth and the record says what happened."""
+        upload = getattr(self.storage, "upload_file", None)
+        if upload is None:
+            return
+        path = out / "match.json"
+        doc = json.loads(path.read_text(encoding="utf-8"))
+        try:
+            url = upload(out / "source.mp4", f"rallyos/{self.id}/match")
+            doc["video"]["cdn_src"] = url
+            cdn = {"provider": "cloudinary", "uploaded": True}
+            self.log.emit("cdn_uploaded", url=url)
+        except Exception as exc:                                      # noqa: BLE001 - reported, not fatal
+            log.warning("final video upload failed: %s", exc)
+            cdn = {"provider": "cloudinary", "uploaded": False, "error": str(exc)[:200]}
+            self.log.emit("cdn_failed", message=str(exc)[:300])
+        doc.setdefault("live", {})["cdn"] = cdn
+        path.write_text(json.dumps(doc, indent=1), encoding="utf-8")
 
     # -- after a restart -------------------------------------------------------------------------------------------
     @classmethod

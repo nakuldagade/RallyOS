@@ -50,6 +50,7 @@ class Settings:
     cloudinary_cloud = os.getenv("CLOUDINARY_CLOUD_NAME", "")
     cloudinary_key = os.getenv("CLOUDINARY_API_KEY", "")
     cloudinary_secret = os.getenv("CLOUDINARY_API_SECRET", "")
+    cloudinary_api_base = os.getenv("RALLYOS_CLOUDINARY_API_BASE", "https://api.cloudinary.com")   # overridden only by tests
     cors_origins = ["http://localhost:3000", "http://127.0.0.1:3000"]
 
 

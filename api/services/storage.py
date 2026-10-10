@@ -1,7 +1,7 @@
 """Where live chunks (and later the final video) are kept: local disk by default, Cloudinary when configured.
 
 Heavy video analysis always runs on this laptop, so every chunk ends up as a local file before it is analysed; Cloudinary
-only adds durable storage and CDN delivery on top (phase E). Local mode works fully offline.
+only adds durable storage and CDN delivery on top (storage_cloudinary.py). Local mode works fully offline.
 """
 from __future__ import annotations
 
@@ -45,12 +45,12 @@ class LocalStorage:
 
 
 def get_storage():
-    """The configured storage. Cloudinary arrives in phase E; until then a request for it falls back to local, loudly."""
+    """The configured storage. Cloudinary without its three credentials falls back to local, loudly (the demo must still run)."""
     if settings.storage == "cloudinary":
         try:
-            from api.services.storage_cloudinary import CloudinaryStorage  # noqa: WPS433
+            from api.services.storage_cloudinary import CloudinaryStorage
 
             return CloudinaryStorage()
-        except ImportError:
-            log.warning("RALLYOS_STORAGE=cloudinary but Cloudinary storage is not available yet: using local storage")
+        except ValueError as exc:
+            log.warning("RALLYOS_STORAGE=cloudinary but %s: using local storage", exc)
     return LocalStorage()

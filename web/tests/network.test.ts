@@ -106,12 +106,62 @@ test("a chunk the server refuses for good is dropped and the queue moves on", as
   assert.ok(phases.some(([s, p]) => s === 1 && p === "failed"));
 });
 
-test("a server that does not use local storage is refused with a clear message", async () => {
-  const clock = new FakeClock();
-  const cap = new Capture({
-    http: { async createSession(b) { return { session_id: "s", chunk_seconds: b.chunk_seconds, storage: "cloudinary" }; },
-            async sendChunk() {}, async stop() {}, async setCorners() {} },
-    store: new MemoryStore(), clock, mime: "video/webm", makeRecorder: () => new FakeRecorder(clock, []),
-  });
-  await assert.rejects(() => cap.start("auto", null), /phase E/);
+// --- Cloudinary: sign, upload straight to Cloudinary, register -----------------------------------------------------------
+import { browserHttp } from "../lib/capture.ts";
+
+interface Call { url: string; method: string; body: unknown }
+
+function fakeServer(opts: { cloudinaryStatus?: number; registerStatus?: number } = {}) {
+  const calls: Call[] = [];
+  const orig = globalThis.fetch;
+  globalThis.fetch = (async (url: string, init: { method?: string; body?: unknown } = {}) => {
+    calls.push({ url, method: init.method ?? "GET", body: init.body });
+    const json = (o: unknown, status = 200) => new Response(JSON.stringify(o), { status });
+    if (url.endsWith("/v1/live/sessions")) return json({ session_id: "s_c", chunk_seconds: 5, storage: "cloudinary" }, 201);
+    if (url.includes("/sign")) return json({ mode: "cloudinary", upload_url: "https://api.cloudinary.com/v1_1/demo/video/upload", file_field: "file",
+      fields: { api_key: "k", signature: "sig", timestamp: "1", public_id: "rallyos/s_c/chunk_0002" } });
+    if (url.startsWith("https://api.cloudinary.com")) return json({ secure_url: "https://res.cloudinary.com/demo/video/upload/v1/chunk_0002.webm" }, opts.cloudinaryStatus ?? 200);
+    if (url.endsWith("/chunks/register")) return json({ seq: 2 }, opts.registerStatus ?? 200);
+    return json({}, 404);
+  }) as typeof fetch;
+  return { calls, restore: () => { globalThis.fetch = orig; } };
+}
+
+const sample = { key: "s_c:2", sessionId: "s_c", seq: 2, blob: new Blob(["x"]), ext: "webm", t0: 10, duration: 5.5, wallStartMs: 0, readyAtMs: 0 };
+
+test("cloudinary mode: the chunk is signed by the API, goes to Cloudinary with the signed fields, then is registered", async () => {
+  const srv = fakeServer();
+  try {
+    const http = browserHttp("http://api");
+    const info = await http.createSession({ sport: "auto", corners: null, chunk_seconds: 5 });
+    assert.equal(info.storage, "cloudinary");
+    await http.sendChunk("s_c", sample, 0.4);
+    const kinds = srv.calls.map((c) => (c.url.includes("/sign") ? "sign" : c.url.startsWith("https://api.cloudinary") ? "cloudinary" : c.url.endsWith("/register") ? "register" : "session"));
+    assert.deepEqual(kinds, ["session", "sign", "cloudinary", "register"]);
+    const form = srv.calls[2].body as FormData;
+    assert.equal(form.get("signature"), "sig");
+    assert.ok(form.get("file") instanceof Blob, "the chunk is sent as the signed file field");
+    assert.equal(form.has("chunk"), false);
+    const reg = JSON.parse(srv.calls[3].body as string);
+    assert.equal(reg.url, "https://res.cloudinary.com/demo/video/upload/v1/chunk_0002.webm");
+    assert.equal(reg.seq, 2);
+    assert.equal(reg.duration, 5.5);
+    // the browser never sees or sends an API secret
+    assert.ok(!JSON.stringify(srv.calls.map((c) => (typeof c.body === "string" ? c.body : ""))).includes("secret"));
+  } finally { srv.restore(); }
+});
+
+test("cloudinary mode: a failed Cloudinary upload is retried (signed again), a refused registration is permanent", async () => {
+  let srv = fakeServer({ cloudinaryStatus: 503 });
+  try {
+    const http = browserHttp("http://api");
+    await http.createSession({ sport: "auto", corners: null, chunk_seconds: 5 });
+    await assert.rejects(() => http.sendChunk("s_c", sample, 0), (e: unknown) => !(e instanceof PermanentUploadError));
+  } finally { srv.restore(); }
+  srv = fakeServer({ registerStatus: 409 });
+  try {
+    const http = browserHttp("http://api");
+    await http.createSession({ sport: "auto", corners: null, chunk_seconds: 5 });
+    await assert.rejects(() => http.sendChunk("s_c", sample, 0), (e: unknown) => e instanceof PermanentUploadError);
+  } finally { srv.restore(); }
 });

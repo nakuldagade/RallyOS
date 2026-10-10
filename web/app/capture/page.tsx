@@ -50,6 +50,7 @@ export default function CapturePage() {
   const [hidden, setHidden] = useState<{ since: number; total: number } | null>(null);
   const [wake, setWake] = useState<"off" | "on" | "unsupported">("off");
   const [persistent, setPersistent] = useState(true);
+  const [storageMode, setStorageMode] = useState<string | null>(null);
   const t0Ref = useRef(0);
 
   useEffect(() => { api.sports().then(setSports).catch(() => setSports([])); }, []);
@@ -149,6 +150,7 @@ export default function CapturePage() {
       });
       capRef.current = cap;
       const info = await cap.start(sport, corners.length === 4 ? corners : null);
+      setStorageMode(info.storage);
       connect(info.session_id);
       t0Ref.current = performance.now();
       setElapsed(0);
@@ -293,6 +295,8 @@ export default function CapturePage() {
             <div className="space-y-1.5 text-sm">
               <div className="flex items-center justify-between"><span className="text-muted">Upload</span>
                 {net.online ? <Badge tone="green">connected</Badge> : <Badge tone="red">offline: buffering</Badge>}</div>
+              {storageMode && <div className="flex items-center justify-between"><span className="text-muted">Chunk storage</span>
+                <Badge tone={storageMode === "local" ? "neutral" : "blue"} title={storageMode === "local" ? "Chunks go to the laptop running RallyOS" : "Chunks go straight to Cloudinary (signed by the API); the laptop fetches them to analyse"}>{storageMode}</Badge></div>}
               <div className="flex items-center justify-between"><span className="text-muted">Buffered on this device</span>
                 <span className="tabular-nums font-medium">{net.pending} chunk{net.pending === 1 ? "" : "s"}</span></div>
               <div className="flex items-center justify-between"><span className="text-muted">Delivered</span><span className="tabular-nums">{net.sent}</span></div>

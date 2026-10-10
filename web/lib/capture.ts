@@ -72,9 +72,6 @@ export class Capture {
   /** Create the session and begin recording. Resolves with the session once the first recorder is running. */
   async start(sport: string, corners: number[][] | null): Promise<SessionInfo> {
     const info = await this.o.http.createSession({ sport, corners, chunk_seconds: this.o.chunkSeconds ?? 5 });
-    if (info.storage !== "local") {
-      throw new Error(`The server uses "${info.storage}" storage; direct upload to it is phase E. Set RALLYOS_STORAGE=local.`);
-    }
     this.sessionId = info.session_id;
     this.seg = new Segmenter({
       makeRecorder: this.o.makeRecorder, mime: this.o.mime, clock: this.o.clock,
@@ -103,29 +100,60 @@ export class Capture {
   }
 }
 
-/** The real HTTP layer: local storage, chunks posted straight to the API. */
+/** The real HTTP layer. Local storage: chunks are posted to the API. Cloudinary: signed by the API, uploaded straight to Cloudinary, then registered. */
 export function browserHttp(api: string): CaptureHttp {
+  const storage = { mode: "local" as string };
   const json = async (path: string, body: unknown) => {
     const res = await fetch(api + path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     if (!res.ok) throw new Error(((await res.json().catch(() => ({}))) as { detail?: string }).detail ?? res.statusText);
     return res.json();
   };
   return {
-    createSession: (b) => json("/v1/live/sessions", b),
+    async createSession(b) {
+      const info = (await json("/v1/live/sessions", b)) as SessionInfo;
+      storage.mode = info.storage;
+      return info;
+    },
     async sendChunk(sessionId, c, uploadS) {
+      const id = encodeURIComponent(sessionId);
+      const name = `chunk_${String(c.seq).padStart(4, "0")}.${c.ext}`;
+      const fail = async (res: Response, what: string) => {
+        // 4xx other than "slow down" means the server looked at this chunk and refused it: retrying cannot help.
+        if (res.status >= 400 && res.status < 500 && res.status !== 408 && res.status !== 429) {
+          throw new PermanentUploadError(`${what}: ${res.status} ${await res.text().catch(() => "")}`);
+        }
+        throw new Error(`${what} failed (${res.status})`);
+      };
+      if (storage.mode === "cloudinary") {
+        // The API signs, the chunk goes straight to Cloudinary, then the API is told where it is and fetches it to analyse it.
+        const signRes = await fetch(`${api}/v1/live/sessions/${id}/sign?seq=${c.seq}`, { method: "POST" });
+        if (!signRes.ok) return fail(signRes, "sign");
+        const sign = (await signRes.json()) as { upload_url: string; fields: Record<string, string>; file_field: string };
+        const cf = new FormData();
+        for (const [k, v] of Object.entries(sign.fields)) cf.append(k, v);
+        cf.append(sign.file_field, c.blob, name);
+        const up = await fetch(sign.upload_url, { method: "POST", body: cf });
+        if (!up.ok) {
+          // an expired signature or a bad upload is retried with a fresh signature (a new attempt signs again)
+          throw new Error(`Cloudinary upload failed (${up.status})`);
+        }
+        const url = ((await up.json()) as { secure_url: string }).secure_url;
+        const reg = await fetch(`${api}/v1/live/sessions/${id}/chunks/register`, {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ seq: c.seq, url, t0: c.t0, duration: c.duration, upload_s: uploadS }),
+        });
+        if (!reg.ok) return fail(reg, "register");
+        return;
+      }
       const form = new FormData();
-      form.append("chunk", c.blob, `chunk_${String(c.seq).padStart(4, "0")}.${c.ext}`);
+      form.append("chunk", c.blob, name);
       form.append("seq", String(c.seq));
       form.append("t0", String(c.t0));
       form.append("duration", String(c.duration));
       form.append("upload_s", String(uploadS));
-      const res = await fetch(`${api}/v1/live/sessions/${encodeURIComponent(sessionId)}/chunks`, { method: "POST", body: form });
+      const res = await fetch(`${api}/v1/live/sessions/${id}/chunks`, { method: "POST", body: form });
       if (res.ok) return;
-      // 4xx other than "slow down" means the server looked at this chunk and refused it: retrying cannot help.
-      if (res.status >= 400 && res.status < 500 && res.status !== 408 && res.status !== 429) {
-        throw new PermanentUploadError(`${res.status} ${await res.text().catch(() => "")}`);
-      }
-      throw new Error(`upload failed (${res.status})`);
+      return fail(res, "upload");
     },
     async stop(sessionId, lastSeq) {
       await json(`/v1/live/sessions/${encodeURIComponent(sessionId)}/stop`, { last_seq: lastSeq });

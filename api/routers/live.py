@@ -150,7 +150,10 @@ def create_session(body: SessionCreate):
 @router.post("/live/sessions/{session_id}/sign")
 def sign(session_id: str, seq: int | None = None):
     ls = _session(session_id)
-    return ls.storage.sign(session_id, seq)
+    try:
+        return ls.storage.sign(session_id, seq)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from None
 
 
 @router.post("/live/sessions/{session_id}/chunks")

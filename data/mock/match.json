@@ -1,10 +1,14 @@
 {
-  "schema_version": "1.0",
+  "schema_version": "1.1",
   "match_id": "m_001",
   "sport": "badminton",
   "sport_confidence": 0.96,
   "video": {"src": "/media/m_001/source.mp4", "overlay": "/media/m_001/overlay.mp4",
-            "fps": 60, "width": 1920, "height": 1080, "duration_s": 132.4, "sha256": "…"},
+            "fps": 60, "width": 1920, "height": 1080, "duration_s": 132.4, "sha256": "…",
+            "cdn_src": null},
+  "live": {"session_id": "s_demo", "chunk_seconds": 5.0, "chunks": 27, "avg_latency_s": 8.4, "max_lag_s": 11.2,
+           "dropped_frames": 0, "reduced_quality_chunks": 0, "avg_process_s": 2.6, "finalise_s": 6.1,
+           "cdn": {"provider": "cloudinary", "uploaded": false}},
   "calibration": {"method": "auto", "homography": [[0,0,0],[0,0,0],[0,0,1]],
                   "focal_px": 1450.0, "reprojection_error_px": 3.1},
   "players": [

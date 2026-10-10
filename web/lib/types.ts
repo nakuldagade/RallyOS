@@ -10,6 +10,7 @@ export interface VideoInfo {
   height: number;
   duration_s: number;
   sha256?: string | null;
+  cdn_src?: string | null;       // the same video on Cloudinary, when live mode used cloud storage
 }
 
 export interface Calibration {
@@ -165,6 +166,20 @@ export interface BallStats {
   source_csv?: string;
 }
 
+/** Present when the match was recorded live (schema 1.1): how the continuous capture behaved. All numbers are measured, not targets. */
+export interface LiveBlock {
+  session_id: string;
+  chunk_seconds: number;
+  chunks: number;
+  avg_latency_s?: number;
+  max_lag_s?: number;
+  dropped_frames?: number;
+  reduced_quality_chunks?: number;
+  avg_process_s?: number;
+  finalise_s?: number;
+  cdn?: { provider: string; uploaded: boolean; error?: string };
+}
+
 export interface MatchJSON {
   schema_version: string;
   match_id: string;
@@ -172,6 +187,7 @@ export interface MatchJSON {
   sport: string;
   sport_confidence?: number | null;
   video: VideoInfo;
+  live?: LiveBlock | null;
   calibration: Calibration;
   players: PlayerRef[];
   tracks_url?: string | null;
