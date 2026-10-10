@@ -109,7 +109,8 @@ function MatchVision() {
         <Link href={`/matches/${m.match_id}/report`} className="btn-primary">AI coach report →</Link>
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-[1fr_340px]">
+      {/* Row 1: the replay and the result of the match */}
+      <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
         <div className="min-w-0 space-y-4">
           <VideoOverlay match={m} tracks={tr} lines={sport.court.lines} courtSize={sport.court} seek={seek}
             onTime={(t, f) => { setTime(t); setFrame(f); }} />
@@ -119,16 +120,6 @@ function MatchVision() {
         </div>
 
         <div className="space-y-4">
-          {m.stats.ball && (
-            <Card title="Ball tracking">
-              <BallTrackingCard ball={m.stats.ball} calibrated={calibrated} />
-            </Card>
-          )}
-          {m.stats.audio && (
-            <Card title="Hits heard from audio">
-              <AudioCard audio={m.stats.audio} />
-            </Card>
-          )}
           <Card title="Score">
             {m.players.length ? (
               <Scoreboard matchId={m.match_id} score={m.score} players={m.players} canConfirm={!match.data?.mock} onConfirmed={setScore} />
@@ -141,25 +132,9 @@ function MatchVision() {
               <RallyOutcomes match={m} onSeek={goto} />
             </Card>
           )}
-          {calibrated ? (
-          <Card title="Top-down view" actions={
-            <select className="input py-1 text-xs" value={heatMode} onChange={(e) => setHeatMode(e.target.value)}>
-              <option value="">Live positions</option>
-              {m.players.map((p) => <option key={`l${p.track_id}`} value={`live:${p.track_id}`}>Live heatmap: {p.name}</option>)}
-              {m.players.map((p) => <option key={`f${p.track_id}`} value={`full:${p.track_id}`}>Whole-clip heatmap: {p.name}</option>)}
-            </select>}>
-            <MiniCourt sport={sport} dots={dots} heat={heat} rects={zoneBoxes} className="mx-auto h-[360px] w-full" />
-            <p className="mt-2 text-xs text-muted">
-              Hollow yellow rings are landings (click to jump).
-              {heat ? (heatKind === "live" ? ` Heatmap builds up as the video plays (to ${fmtTime(time)}).` : " Heatmap of the whole clip from tracked foot positions.") : ""}
-            </p>
-            <ZoneSummary rows={zoneRows} timeLabel={`up to ${fmtTime(time)}`} />
-            {!match.data?.mock && <div className="mt-3 flex justify-end"><CalibratePanel match={m} onDone={() => { match.reload(); tracks.reload(); }} /></div>}
-          </Card>
-          ) : (
-            <Card title="Top-down view">
-              <p className="mb-3 text-sm text-muted">Court not calibrated for this clip, so there are no court positions, heatmaps, line calls or score. Tap the 4 court corners to add them.</p>
-              {!match.data?.mock && <CalibratePanel match={m} onDone={() => { match.reload(); tracks.reload(); }} />}
+          {m.stats.ball && (
+            <Card title="Ball tracking">
+              <BallTrackingCard ball={m.stats.ball} calibrated={calibrated} />
             </Card>
           )}
           {m.disputes.length > 0 && (
@@ -172,6 +147,54 @@ function MatchVision() {
                   </Link>
                 ))}
               </div>
+            </Card>
+          )}
+        </div>
+      </div>
+
+      {/* Row 2: where the players were, and how well the tracking worked */}
+      <div className="mt-4 grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
+        {calibrated ? (
+          <Card title="Top-down view" actions={
+            <select className="input py-1 text-xs" value={heatMode} onChange={(e) => setHeatMode(e.target.value)}>
+              <option value="">Live positions</option>
+              {m.players.map((p) => <option key={`l${p.track_id}`} value={`live:${p.track_id}`}>Live heatmap: {p.name}</option>)}
+              {m.players.map((p) => <option key={`f${p.track_id}`} value={`full:${p.track_id}`}>Whole-clip heatmap: {p.name}</option>)}
+            </select>}>
+            <div className="grid gap-5 md:grid-cols-[minmax(0,340px)_minmax(0,1fr)]">
+              <div>
+                <MiniCourt sport={sport} dots={dots} heat={heat} rects={zoneBoxes} className="mx-auto h-[400px] w-full" />
+                <p className="mt-2 text-xs text-muted">
+                  Hollow yellow rings are landings (click to jump).
+                  {heat ? (heatKind === "live" ? ` Heatmap builds up as the video plays (to ${fmtTime(time)}).` : " Heatmap of the whole clip from tracked foot positions.") : ""}
+                </p>
+              </div>
+              <div className="min-w-0">
+                <ZoneSummary rows={zoneRows} timeLabel={`up to ${fmtTime(time)}`} />
+              </div>
+            </div>
+          </Card>
+        ) : (
+          <Card title="Top-down view">
+            <p className="mb-3 text-sm text-muted">Court not calibrated for this clip, so there are no court positions, heatmaps, line calls or score. Tap the 4 court corners to add them.</p>
+            {!match.data?.mock && <CalibratePanel match={m} onDone={() => { match.reload(); tracks.reload(); }} />}
+          </Card>
+        )}
+
+        <div className="space-y-4">
+          {m.stats.audio && (
+            <Card title="Hits heard from audio">
+              <AudioCard audio={m.stats.audio} />
+            </Card>
+          )}
+          {calibrated && !match.data?.mock && (
+            <Card title="Court calibration">
+              <p className="mb-3 text-xs text-muted">
+                {m.calibration.method === "auto" ? "Found automatically" : m.calibration.method === "4-tap" ? "Set from corners" : "Calibrated"}
+                {m.calibration.reprojection_error_px != null ? ` · line fit error ${m.calibration.reprojection_error_px} px` : ""}.
+                If the outline is off, re-run the analysis with corrected corners.
+              </p>
+              <CalibratePanel match={m} onDone={() => { match.reload(); tracks.reload(); }} />
             </Card>
           )}
         </div>
