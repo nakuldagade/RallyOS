@@ -85,6 +85,7 @@ export const api = {
   playerChat: (id: string, messages: { role: string; content: string }[]) =>
     request<{ answer: string; source: string; match_ids: string[] }>(`/v1/players/${encodeURIComponent(id)}/chat`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messages }) }),
   matchSummary: (id: string) => request<{ summary: string; source: string }>(`/v1/matches/${encodeURIComponent(id)}/summary`),
+  liveScene3d: (sessionId: string) => request<Scene3DData>(`/v1/live/sessions/${encodeURIComponent(sessionId)}/scene3d`),
   playerAnalysis: (id: string) => request<PlayerAnalysis>(`/v1/players/${encodeURIComponent(id)}/analysis`),
   coachDashboard: () => request<CoachDashboard>("/v1/coach/dashboard"),
   addToRoster: (playerId: string) => request<unknown>("/v1/coach/roster", post({ player_id: playerId })),

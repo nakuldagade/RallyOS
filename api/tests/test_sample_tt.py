@@ -41,3 +41,24 @@ def test_the_generation_is_repeatable(tmp_path):
     a = build_match(SPECS[0], tmp_path / "a", "Dev", render_video=False)
     b = build_match(SPECS[0], tmp_path / "b", "Dev", render_video=False)
     assert a["events"] == b["events"] and a["stats"]["per_player"] == b["stats"]["per_player"]
+
+
+def test_a_live_session_gets_the_same_3d_payload_as_a_finished_match(tmp_path):
+    import json
+
+    from api.services import court3d
+
+    d = build_match(SPECS[2], tmp_path / "m", "Dev", render_video=False)
+    tracks = json.loads((tmp_path / "m" / "tracks.json").read_text(encoding="utf-8"))
+    scene = court3d.live_scene(d, tracks["frames"], tracks["fps"], "s_test")
+    assert scene["match_id"] == "live:s_test" and scene["sport"] == "table_tennis"
+    assert len(scene["flights"]) > 20 and {p["track_id"] for p in scene["players"]} == {1, 2}
+    assert scene["positions"]["1"] and scene["heat"]["1"]["frames"] > 0
+    assert scene["court"]["view3d"] and scene["duration_s"] == round(len(tracks["frames"]) / tracks["fps"], 2)
+
+
+def test_the_live_3d_endpoint_says_so_for_an_unknown_session():
+    from fastapi.testclient import TestClient
+
+    from api.main import app
+    assert TestClient(app).get("/v1/live/sessions/s_nope/scene3d").status_code == 404

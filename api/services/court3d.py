@@ -62,7 +62,7 @@ def visible_matches(user: User, session: Session) -> list[dict]:
     return out
 
 
-def _heat(frames: list[dict], track_id: int, length: float, width: float) -> dict | None:
+def _heat(frames: list[dict], track_id: int, length: float, width: float, clamp: bool = False) -> dict | None:
     import math
 
     rows, cols = math.ceil(length / CELL_M), math.ceil(width / CELL_M)
@@ -72,7 +72,10 @@ def _heat(frames: list[dict], track_id: int, length: float, width: float) -> dic
         p = next((q for q in fr["players"] if q["track_id"] == track_id), None)
         if not p or not p.get("court"):
             continue
-        r, c = int(p["court"][1] // CELL_M), int(p["court"][0] // CELL_M)
+        x, y = p["court"]
+        if clamp:                                             # a table sport: players stand beside / behind the table, drawn on its edge
+            x, y = min(max(x, 0.0), width - 1e-6), min(max(y, 0.0), length - 1e-6)
+        r, c = int(y // CELL_M), int(x // CELL_M)
         if 0 <= r < rows and 0 <= c < cols:
             grid[r][c] += 1
             n += 1
@@ -110,19 +113,33 @@ def scene(user: User | None, match_id: str, session: Session, open_if_unassigned
     if not allowed:
         return None
     data = store.load_match(match_id, session)
-    cfg = load_sport(data["sport"])
-    court = cfg["court"]
     try:
         tracks = store.load_tracks(match_id)
     except KeyError:
         tracks = {"fps": data["video"]["fps"], "frames": []}
     fps = float(tracks.get("fps") or data["video"]["fps"])
-    frames = tracks.get("frames", [])
+    return build_payload(data, tracks.get("frames", []), fps, allowed, match_id, row.created_at, data.get("video", {}).get("duration_s"))
+
+
+def live_scene(data: dict, frames: list[dict], fps: float, session_id: str) -> dict:
+    """The same payload for a live session, from what has been analysed so far (both sides: the session has no assigned players)."""
+    from datetime import datetime, timezone
+
+    duration = round(len(frames) / fps, 2) if fps else None
+    return build_payload(data, frames, fps, {1: None, 2: None}, f"live:{session_id}", datetime.now(timezone.utc).isoformat(timespec="seconds"), duration)
+
+
+def build_payload(data: dict, frames: list[dict], fps: float, allowed: dict, match_id: str, date: str, duration_s) -> dict:
+    from rallyos.analytics.flights3d import reconstruct
+    from rallyos.sports import load_sport
+
+    cfg = load_sport(data["sport"])
+    court = cfg["court"]
     meta = {p["track_id"]: p for p in data.get("players", [])}
     flights = [f for f in reconstruct(data["events"], fps, cfg, frames) if f["track_id"] in allowed]
     length, width = float(court["length"]), float(court["width"])
     return {
-        "match_id": match_id, "date": row.created_at, "sport": data["sport"], "fps": fps, "duration_s": data.get("video", {}).get("duration_s"),
+        "match_id": match_id, "date": date, "sport": data["sport"], "fps": fps, "duration_s": duration_s,
         "court": {"length": length, "width": width, "lines": court["lines"], "net": cfg.get("net") or {}, "walls": cfg.get("walls") or [],
                   "view3d": cfg.get("view3d") or {}},
         "players": [{"track_id": t, "player_id": pid, "name": (meta.get(t) or {}).get("name") or f"Player {t}", "side": (meta.get(t) or {}).get("side"),
@@ -130,7 +147,7 @@ def scene(user: User | None, match_id: str, session: Session, open_if_unassigned
         "object_size_m": (cfg.get("projectile") or {}).get("size_m"),
         "flights": flights,
         "positions": {str(t): _positions(frames, fps, t) for t in allowed},
-        "heat": {str(t): _heat(frames, t, length, width) for t in allowed},
+        "heat": {str(t): _heat(frames, t, length, width, clamp="surface_height_m" in court) for t in allowed},
         "notes": {"heights": "Shot heights are reconstructed from the measured end points, the measured time and a drag law (solid paths) or a gravity-only arc (dashed paths): one camera does not measure height.",
                   "positions": "Player positions are the feet on the court plane from the homography."},
     }

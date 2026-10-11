@@ -229,6 +229,15 @@ def snapshot(session_id: str):
     return _session(session_id).snapshot()
 
 
+@router.get("/live/sessions/{session_id}/scene3d")
+def scene3d(session_id: str):
+    """Players, reconstructed shot paths and heatmaps of the session so far, for the 3D Smart Court on the capture page."""
+    scene = _session(session_id).scene3d()
+    if scene is None:
+        raise HTTPException(409, "the court has not been found yet, so there is nothing to show in 3D")
+    return scene
+
+
 @router.post("/live/sessions/{session_id}/resume", status_code=201)
 def resume(session_id: str):
     if live_service.get(session_id) is not None:

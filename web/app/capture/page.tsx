@@ -15,7 +15,7 @@ import { BADMINTON, sportLabel } from "@/lib/sports";
 import type { CourtDetection, SportConfig } from "@/lib/types";
 import { Badge, Card, ErrorBox, PageHeader } from "@/components/ui";
 import LiveDashboard from "@/components/live/LiveDashboard";
-import DetectedCourt from "@/components/court3d/DetectedCourt";
+import LiveSmartCourt from "@/components/court3d/LiveSmartCourt";
 
 type Pt = [number, number];
 const CORNER_NAMES = ["near-left", "near-right", "far-right", "far-left"];
@@ -375,7 +375,7 @@ export default function CapturePage() {
 
       {state.calibration?.sport && (
         <div className="mt-4">
-          <DetectedCourt summary={{ sport: state.calibration.sport, calibrated: state.calibration.quality !== "none", quality: state.calibration.quality, method: state.calibration.method ?? null,
+          <LiveSmartCourt live={state} summary={{ sport: state.calibration.sport, calibrated: state.calibration.quality !== "none", quality: state.calibration.quality, method: state.calibration.method ?? null,
             precision: state.calibration.precision ?? null, corners_px: (state.calibration.corners_px as [number, number][] | null | undefined) ?? null, note: state.calibration.note ?? null,
             sport_source: "auto-detected on the first chunk", video: camera ? { fps: camera.fps ?? 25, width: camera.w, height: camera.h } : undefined }} />
         </div>

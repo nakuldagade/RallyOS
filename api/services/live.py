@@ -125,6 +125,22 @@ class LiveSession:
         return clean({"session_id": self.id, "state": self.state, "match_id": self.match_id, "next_seq": self.next_seq,
                       "pending": sorted(self.pending), **snap})
 
+    def scene3d(self) -> dict | None:
+        """The 3D court payload (players, shot paths, heatmaps) from what has been analysed so far, or None before the court is known."""
+        from api.services import court3d
+
+        with self.alock:
+            a = self.analyzer
+            if a is None or a.scene is None or a.fps is None or a.scene.H is None:
+                return None
+            frames = list(a.tracker.frames)
+            events = [dict(e) for e in a.events]
+            data = {"sport": a.scene.sport, "events": events,
+                    "players": [{"track_id": t, "name": a.names.get(t), "side": "near" if t == 1 else "far"} for t in (1, 2)],
+                    "video": {"fps": a.fps}}
+            fps = float(a.fps)
+        return court3d.live_scene(data, frames, fps, self.id)
+
     def info(self) -> dict:
         return {"session_id": self.id, "state": self.state, "match_id": self.match_id, "next_seq": self.next_seq,
                 "pending": sorted(self.pending), "received": len(self.received), "closed": self.log.closed,
