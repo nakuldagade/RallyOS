@@ -20,7 +20,6 @@ const tooltipStyle = { background: "rgb(var(--card))", border: "1px solid rgb(va
 const TREND_ORDER: { key: keyof MetricValues; label: string; unit: string }[] = [
   { key: "avg_return_to_base_s", label: "Return to base", unit: "s (lower is better)" },
   { key: "split_step_pct", label: "Split-step", unit: "% of opponent shots" },
-  { key: "fastest_shot_kmh", label: "Fastest shot", unit: "km/h at the racket" },
   { key: "best_shot_score", label: "Best-shot score", unit: "out of 100" },
   { key: "distance_per_min", label: "Distance covered", unit: "m per minute" },
   { key: "top_speed_mps", label: "Top movement speed", unit: "m/s" },
@@ -192,7 +191,6 @@ export default function PlayerAnalysis({ playerId }: { playerId: string }) {
                 <div className="mt-0.5 text-xs text-muted">
                   {Math.round(m.duration_s)} s · {m.hits ?? 0} hits
                   {m.metrics.avg_return_to_base_s != null ? ` · return ${m.metrics.avg_return_to_base_s} s` : ""}
-                  {m.metrics.fastest_shot_kmh != null ? ` · fastest ${m.metrics.fastest_shot_kmh} km/h` : ""}
                 </div>
               </li>
             ))}

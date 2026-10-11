@@ -17,7 +17,6 @@ import Scene3DPanel from "@/components/court3d/Scene3DPanel";
 const METRIC_ROWS: { key: string; label: string; unit: string; better: "lower" | "higher" }[] = [
   { key: "avg_return_to_base_s", label: "Return to base", unit: "s", better: "lower" },
   { key: "split_step_pct", label: "Split-step", unit: "%", better: "higher" },
-  { key: "fastest_shot_kmh", label: "Fastest shot (at the racket)", unit: "km/h", better: "higher" },
   { key: "distance_per_min", label: "Distance covered", unit: "m/min", better: "higher" },
   { key: "best_shot_score", label: "Best-shot score", unit: "/100", better: "higher" },
 ];

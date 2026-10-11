@@ -29,20 +29,20 @@ export default function MatchSmartCourt({ match, sport, time, mock }: { match: M
   const { user } = useAuth();
   const scene = useApi(() => (mock ? Promise.reject(new Error("the sample match has no stored tracking")) : api.matchScene3d(match.match_id)), [match.match_id, user?.id]);
   const summary = summaryOf(match);
-  const specs = <div className="card p-4"><h3 className="mb-2 text-sm font-medium">Court specifications</h3><CourtSpecs cfg={sport} summary={summary} /></div>;
+  const specs = <div className="mt-5 border-t border-border pt-4"><h3 className="mb-3 text-sm font-semibold">Court specifications</h3><CourtSpecs cfg={sport} summary={summary} /></div>;
   if (scene.loading) return <Loading label="Building the 3D court from this match…" />;
   if (scene.error || !scene.data) {
     const restricted = /log in|belongs/i.test(scene.error ?? "");
     return (
-      <Scene3DPanel role={user?.role ?? "viewer"} now={emptyScene(sport, match.match_id)} bottomRight={specs}
+      <><Scene3DPanel role={user?.role ?? "viewer"} now={emptyScene(sport, match.match_id)}
         topRight={
           <div className="card p-4 text-sm">
             <p>{restricted ? "The shots, players and heatmaps of this match are for its players and their coaches. The court it was played on is shown here." : `The shots could not be shown: ${scene.error}. The court is shown here.`}</p>
             {restricted && !user && <Link href="/login" className="btn-primary mt-3 inline-block">Log in</Link>}
-          </div>} />
+          </div>} />{specs}</>
     );
   }
-  return <Scene3DPanel role={user?.role ?? "viewer"} now={scene.data} follow={{ time }} height="h-[min(58vh,560px)] min-h-[340px]" bottomRight={specs} />;
+  return <><Scene3DPanel role={user?.role ?? "viewer"} now={scene.data} follow={{ time }} height="h-[min(58vh,560px)] min-h-[340px]" />{specs}</>;
 }
 
 export function SmartCourtLink() {

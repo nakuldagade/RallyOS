@@ -30,7 +30,6 @@ METRICS = {
     "avg_return_to_base_s": ("Return to base", "s", "lower", 0.08, 0.15),
     "returned_pct": ("Back at base before the reply", "%", "higher", 0.08, 10),
     "split_step_pct": ("Split-step", "%", "higher", 0.10, 10),
-    "fastest_shot_kmh": ("Fastest shot (at the racket)", "km/h", "higher", 0.10, 20),
     "top_speed_mps": ("Top movement speed", "m/s", "higher", 0.08, 0.5),
     "distance_per_min": ("Distance covered", "m/min", "neutral", 0.10, 5),
     "best_shot_score": ("Best-shot score", "/100", "higher", 0.08, 5),
@@ -54,7 +53,6 @@ def _metrics(stats: dict, duration_s: float) -> dict:
         "avg_return_to_base_s": stats.get("avg_return_to_base_s"),
         "returned_pct": None if stats.get("returned_pct") is None else round(stats["returned_pct"] * (100 if stats["returned_pct"] <= 1 else 1)),
         "split_step_pct": None if stats.get("split_step_pct") is None else round(stats["split_step_pct"] * 100),
-        "fastest_shot_kmh": stats.get("fastest_shot_kmh") if stats.get("fastest_shot_err_pct") is not None else None,   # launch speeds only: an older average is not comparable
         "top_speed_mps": stats.get("top_speed_mps"),
         "distance_per_min": round(stats["distance_m"] / (duration_s / 60.0), 1) if stats.get("distance_m") and duration_s >= 5 else None,
         "best_shot_score": best.get("score"),

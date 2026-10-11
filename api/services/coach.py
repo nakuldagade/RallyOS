@@ -161,16 +161,6 @@ def template_insights(data: dict) -> list[dict]:
         if st.get("most_zone"):
             add(f"{who} spends the most time in the {st['most_zone'].replace('-', ' ')} zone ({round(st['most_zone_pct'] * 100)}% of the tracked time).",
                 ["most_zone", "most_zone_pct"], fallback)
-        if st.get("fastest_shot_kmh") is not None:
-            fast = next((e["t"] for e in data["events"] if e.get("track_id") == t and e.get("speed_kmh") == st["fastest_shot_kmh"]), None)
-            err = st.get("fastest_shot_err_pct")
-            if err is not None:
-                add(f"{who}'s fastest shot left the racket at about {st['fastest_shot_kmh']} km/h (plus or minus {err}%), worked out from the distance, "
-                    "the flight time and air drag.", ["fastest_shot_kmh", "fastest_shot_err_pct"], [fast] if fast is not None else None)
-            else:
-                add(f"{who}'s fastest shot averaged about {st['fastest_shot_kmh']} km/h from contact to the next contact or landing "
-                    "(an average horizontal speed, so the shuttle's peak speed is higher).",
-                    ["fastest_shot_kmh"], [fast] if fast is not None else None)
         bs = st.get("best_shot")
         if bs:
             what = {"winner": "won the point", "forced_error": "forced an error", "kept_going": "kept the rally going",

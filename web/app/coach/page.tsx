@@ -33,7 +33,6 @@ function PlayerCard({ r, onRemove }: { r: CoachRow; onRemove: () => void }) {
         <p className="mt-2 text-sm text-muted">
           Latest: vs {l.opponent}{l.result ? `, ${l.result}` : ""}
           {l.metrics.avg_return_to_base_s != null ? ` · return to base ${l.metrics.avg_return_to_base_s} s` : ""}
-          {l.metrics.fastest_shot_kmh != null ? ` · fastest ${l.metrics.fastest_shot_kmh} km/h` : ""}
         </p>
       ) : <p className="mt-2 text-sm text-muted">No analysed match is linked to this player yet.</p>}
       {r.attention.length > 0 && (

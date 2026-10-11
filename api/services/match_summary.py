@@ -22,7 +22,7 @@ def facts(data: dict) -> dict:
     players = {}
     for tid, name in names.items():
         s = per.get(str(tid)) or {}
-        players[name] = {k: s[k] for k in ("hits", "distance_m", "avg_return_to_base_s", "returned_pct", "split_step_pct", "fastest_shot_kmh", "top_speed_mps") if s.get(k) is not None}
+        players[name] = {k: s[k] for k in ("hits", "distance_m", "avg_return_to_base_s", "returned_pct", "split_step_pct", "top_speed_mps") if s.get(k) is not None}
         if s.get("shot_mix"):
             players[name]["shot_mix"] = s["shot_mix"]
         if s.get("zone_pct"):
@@ -52,8 +52,6 @@ def template(f: dict) -> str:
             bits.append(f"{s['hits']} hits")
         if "distance_m" in s:
             bits.append(f"{s['distance_m']} m covered")
-        if "fastest_shot_kmh" in s:
-            bits.append(f"fastest shot about {s['fastest_shot_kmh']} km/h")
         if "avg_return_to_base_s" in s:
             bits.append(f"{s['avg_return_to_base_s']} s to return to base")
         if s.get("zone_pct"):

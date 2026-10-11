@@ -104,14 +104,14 @@ def test_template_coach_cites_movement_stats_with_evidence_clips():
     data = _movement_match()
     ins = coach.template_insights(data)
     by_stat = {i["stat_ids"][0].split(".", 2)[2]: i for i in ins}
-    assert {"avg_return_to_base_s", "fatigue.first_third_return_s", "split_step_detected", "most_zone", "fastest_shot_kmh",
+    assert {"avg_return_to_base_s", "fatigue.first_third_return_s", "split_step_detected", "most_zone",
             "shot_mix.serve"} <= set(by_stat)
+    assert "fastest_shot_kmh" not in by_stat                          # shot speed is no longer an insight
     for i in ins:                                                    # grounded: stats exist, clips given, numbers in the stats
         assert coach.validate_llm(i, data), i["text"]
     assert by_stat["avg_return_to_base_s"]["clip_t"] == [2.16, 6.16]                       # the slowest returns
     assert by_stat["fatigue.first_third_return_s"]["clip_t"] == [12.0, 95.0]
-    assert by_stat["fastest_shot_kmh"]["clip_t"] == [2.16]                                  # the fastest shot itself
-    assert "endurance" in by_stat["fatigue.first_third_return_s"]["text"] and "lower bound" not in by_stat["fastest_shot_kmh"]["text"]
+    assert "endurance" in by_stat["fatigue.first_third_return_s"]["text"]
     assert "guide, not a count" in by_stat["split_step_detected"]["text"]
 
 

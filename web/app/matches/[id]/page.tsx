@@ -248,10 +248,9 @@ function MatchVision() {
         {tab === "shots" && <ShotMix match={m} />}
         {tab === "events" && (
           <div className="overflow-x-auto">
-            <p className="mb-2 text-xs text-muted">*Shot speed is the speed at the racket (launch speed), worked out from the distance to the next contact or landing, the time between them and air drag, with a one-standard-deviation band; it is shown only when both ends are known and a real shot can explain them. Older analyses stored the average horizontal speed instead (a lower bound). Hover a dash to see why there is none.</p>
             <table className="w-full text-sm">
               <thead className="text-left text-xs text-muted">
-                <tr><th className="py-2">Time</th><th>Type</th><th>Player</th><th title="Shot types follow the sport's YAML rules; hover for the reason. A dash means no rule could be checked and matched.">Shot / call</th><th title="Speed at the racket, from the distance to the next contact or landing, the flight time and air drag, with a one-standard-deviation band. Older analyses show the average horizontal speed instead, a lower bound.">Shot speed*</th><th>Confidence</th><th>Source</th></tr>
+                <tr><th className="py-2">Time</th><th>Type</th><th>Player</th><th title="Shot types follow the sport's YAML rules; hover for the reason. A dash means no rule could be checked and matched.">Shot / call</th><th>Confidence</th><th>Source</th></tr>
               </thead>
               <tbody>
                 {m.events.map((e) => (
@@ -264,10 +263,6 @@ function MatchVision() {
                         <span>{e.shot} <span className="text-xs text-muted">{pct(e.shot_conf ?? 0)}</span></span>
                       ) : e.call ? `${e.call} (${pct(e.call_prob)})` : e.note ? <span className="text-xs text-muted">no call</span>
                         : e.type === "hit" && e.shot_why ? <span className="text-xs text-muted" title={e.shot_why}>—</span> : "—"}
-                    </td>
-                    <td className="tabular-nums" title={e.speed_kmh != null ? (e.speed_kind === "launch" ? `Launch speed at the racket (${e.speed_basis}); the plain average over the flight was ${e.avg_speed_kmh} km/h, launch angle ${e.launch_angle_deg}°` : `Average horizontal speed, ${e.speed_basis}; a lower bound of the shuttle's peak speed`) : (e.speed_why_not ?? undefined)}>
-                      {speed(e.speed_kmh, e.speed_err_pct)}
-                      {e.speed_kmh == null && e.speed_why_not ? <span className="ml-1 text-[10px] text-muted">n/a</span> : null}
                     </td>
                     <td className="tabular-nums">{pct(e.confidence)}{e.interpolated ? " · interpolated" : ""}</td>
                     <td className="text-muted">{e.source?.join(" + ") ?? "vision"}</td>

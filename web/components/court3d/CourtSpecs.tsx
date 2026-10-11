@@ -12,7 +12,7 @@ function Row({ k, v }: { k: string; v: React.ReactNode }) {
 }
 
 function Group({ title, children }: { title: string; children: React.ReactNode }) {
-  return <section><h4 className="label mb-1 mt-3 first:mt-0">{title}</h4><dl className="divide-y divide-border text-sm">{children}</dl></section>;
+  return <section className="mb-4 break-inside-avoid"><h4 className="label mb-1">{title}</h4><dl className="divide-y divide-border text-sm">{children}</dl></section>;
 }
 
 export default function CourtSpecs({ cfg, summary, mockNote }: { cfg: SportConfig; summary?: Partial<CourtSummary> | null; mockNote?: string }) {
@@ -26,7 +26,7 @@ export default function CourtSpecs({ cfg, summary, mockNote }: { cfg: SportConfi
   const fps = v?.fps, minFps = cfg.capture?.min_fps, recFps = cfg.capture?.recommended_fps;
   const fpsTone = fps == null || minFps == null ? "neutral" : fps >= (recFps ?? minFps) ? "green" : fps >= minFps ? "amber" : "red";
   return (
-    <div className="space-y-1">
+    <div className="columns-1 gap-10 md:columns-2 xl:columns-3">
       <Group title="Sport and detection">
         <Row k="Sport" v={<b>{cfg.display_name ?? sportLabel(cfg.sport)}</b>} />
         {summary && <Row k="How it was chosen" v={summary.sport_source ?? "—"} />}

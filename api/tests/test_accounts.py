@@ -191,7 +191,7 @@ def test_the_heatmap_adds_up_every_match_in_the_players_own_half(client, matches
     assert h["latest"][int(3.0 // 0.5)][int(3.0 // 0.5)] == 1.0 and h["earlier"] is not None
 
 
-def test_an_old_average_fastest_shot_is_not_compared_with_a_launch_speed_and_tiny_changes_are_not_announced(client, tmp_path):
+def test_tiny_changes_are_not_announced_and_the_fastest_shot_is_not_a_compared_metric(client, tmp_path):
     old = stats(0.18, 0.40, 90)
     old.pop("fastest_shot_err_pct")                                   # an older analysis: the average over the flight, no band
     write_match(tmp_path, "m_acct_old", old, stats(1.0, 0.5, 150))
@@ -207,9 +207,9 @@ def test_an_old_average_fastest_shot_is_not_compared_with_a_launch_speed_and_tin
     assert client.post("/v1/matches/m_acct_old/players", json={"side1": pid["user"]["player_id"]}, headers=h).status_code == 200
     assert client.post("/v1/matches/m_acct_new/players", json={"side1": pid["user"]["player_id"]}, headers=h).status_code == 200
     a = client.get(f"/v1/players/{pid['user']['player_id']}/analysis", headers={"Authorization": f"Bearer {pid['token']}"}).json()
-    assert a["matches"][0]["metrics"]["fastest_shot_kmh"] is None and a["matches"][1]["metrics"]["fastest_shot_kmh"] == 230
+    assert "fastest_shot_kmh" not in a["matches"][1]["metrics"]
     c = {x["metric"]: x for x in a["compare"]}
-    assert "fastest_shot_kmh" not in c                                # nothing earlier to compare a launch speed with
+    assert "fastest_shot_kmh" not in c                                # the fastest shot was removed from the analysis (too inaccurate)
     assert c["avg_return_to_base_s"]["verdict"] == "steady"           # 0.18 s -> 0.26 s is +44% but only 0.08 s: not announced
     assert c["split_step_pct"]["verdict"] == "steady"
 
