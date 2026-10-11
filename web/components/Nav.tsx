@@ -111,7 +111,8 @@ export default function Nav() {
     <aside className="border-b border-border bg-card md:sticky md:top-0 md:h-screen md:w-60 md:shrink-0 md:border-b-0 md:border-r">
       <div className="flex h-full flex-col gap-4 p-4">
         <Link href="/" className="flex items-center gap-2">
-          <span className="grid h-8 w-8 place-items-center rounded-lg bg-accent font-black text-accent-fg">R</span>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo.png" alt="RallyOS" className="h-10 w-10 object-contain dark:invert" />
           <span>
             <span className="block font-semibold leading-tight">RallyOS</span>
             <span className="block text-[11px] leading-tight text-muted">Every rally counted</span>
