@@ -26,15 +26,15 @@ export default function DetectedCourt({ summary }: { summary: Partial<CourtSumma
   return (
     <Card title={`Court detected: ${sportLabel(summary.sport)}${summary.sport_confidence != null ? ` · ${Math.round(summary.sport_confidence * 100)}% fit` : ""}`}
       actions={<Badge tone={summary.calibrated ? "green" : "amber"}>{summary.calibrated ? "camera calibrated" : "court not calibrated yet"}</Badge>}>
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
+      <div className="space-y-5">
         <div className="relative overflow-hidden rounded-xl border border-border bg-[#0b1220]">
-          <CourtViewer handle={viewer} className="h-[340px] w-full" sport={c.sport} court={scene.court} objectSize={scene.object_size_m} layers={[]} duration={1}
+          <CourtViewer handle={viewer} className="h-[min(48vh,420px)] min-h-[300px] w-full" sport={c.sport} court={scene.court} objectSize={scene.object_size_m} layers={[]} duration={1}
             playing={false} speed={1} loop={false} showPaths />
           <div className="absolute left-3 top-3 flex flex-wrap gap-1.5">
             {PRESETS.map((p) => <button key={p.id} onClick={() => viewer.current?.setPreset(p.id)} className="rounded-md bg-black/50 px-2 py-1 text-xs text-white hover:bg-black/70">{p.label}</button>)}
           </div>
         </div>
-        <CourtSpecs cfg={c} summary={summary} />
+        <div className="border-t border-border pt-4"><h3 className="mb-3 text-sm font-semibold">Court specifications</h3><CourtSpecs cfg={c} summary={summary} /></div>
       </div>
       <p className="mt-2 text-xs text-muted">Shown as soon as the court was found, while the players, the shuttle and the rest are still being analysed. The shots and players are added to this court on the match page when the analysis is done.</p>
     </Card>

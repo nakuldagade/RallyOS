@@ -8,7 +8,7 @@ import type { CourtSummary, SportConfig } from "@/lib/types";
 import { Badge } from "@/components/ui";
 
 function Row({ k, v }: { k: string; v: React.ReactNode }) {
-  return <div className="flex items-start justify-between gap-3 py-1"><dt className="text-muted">{k}</dt><dd className="text-right tabular-nums">{v}</dd></div>;
+  return <div className="flex items-baseline justify-between gap-4 py-1.5"><dt className="shrink-0 text-muted">{k}</dt><dd className="min-w-0 text-right tabular-nums [overflow-wrap:anywhere]">{v}</dd></div>;
 }
 
 function Group({ title, children }: { title: string; children: React.ReactNode }) {
@@ -26,7 +26,7 @@ export default function CourtSpecs({ cfg, summary, mockNote }: { cfg: SportConfi
   const fps = v?.fps, minFps = cfg.capture?.min_fps, recFps = cfg.capture?.recommended_fps;
   const fpsTone = fps == null || minFps == null ? "neutral" : fps >= (recFps ?? minFps) ? "green" : fps >= minFps ? "amber" : "red";
   return (
-    <div className="columns-1 gap-10 md:columns-2 xl:columns-3">
+    <div className="grid gap-x-10 gap-y-1 [grid-template-columns:repeat(auto-fill,minmax(260px,1fr))]">
       <Group title="Sport and detection">
         <Row k="Sport" v={<b>{cfg.display_name ?? sportLabel(cfg.sport)}</b>} />
         {summary && <Row k="How it was chosen" v={summary.sport_source ?? "—"} />}
@@ -71,7 +71,7 @@ export default function CourtSpecs({ cfg, summary, mockNote }: { cfg: SportConfi
       {v && (
         <Group title="Video against the capture advice">
           <Row k="Video" v={`${v.width}×${v.height} at ${Math.round(v.fps * 10) / 10} fps${v.fps ? ` · ${Math.round(1000 / v.fps)} ms a frame` : ""}`} />
-          {minFps != null && <Row k="Recommended" v={<span className="flex items-center gap-2"><Badge tone={fpsTone}>{fpsTone === "green" ? "meets it" : fpsTone === "amber" ? "above the minimum" : fpsTone === "red" ? "below the minimum" : "n/a"}</Badge>{minFps}+ fps, ideally {recFps}</span>} />}
+          {minFps != null && <Row k="Recommended" v={<span className="flex flex-wrap items-center justify-end gap-2"><Badge tone={fpsTone}>{fpsTone === "green" ? "meets it" : fpsTone === "amber" ? "above the minimum" : fpsTone === "red" ? "below the minimum" : "n/a"}</Badge>{minFps}+ fps, ideally {recFps}</span>} />}
           {cfg.capture?.camera && <Row k="Camera setup" v={cfg.capture.camera} />}
         </Group>
       )}
