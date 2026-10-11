@@ -67,6 +67,8 @@ export default function Scene3DPanel({ now, before, role, loading, topRight, bot
   const shown = layers.filter((l) => l.visible);
   const flightsShown = shown.reduce((n, l) => n + l.flights.length, 0);
   const estimates = shown.reduce((n, l) => n + l.flights.filter((f) => f.kind === "estimate").length, 0);
+  const nearest = shown.reduce((n, l) => n + l.flights.filter((f) => f.placement === "nearest").length, 0);
+  const guessed = shown.reduce((n, l) => n + l.flights.filter((f) => f.placement === "base").length, 0);
   const sport = now?.sport ?? "tennis";
 
   return (
@@ -106,7 +108,7 @@ export default function Scene3DPanel({ now, before, role, loading, topRight, bot
                 onChange={(e) => { setPlaying(false); setFollowing(false); viewer.current?.seek(Number(e.target.value)); }} aria-label="Match time" />
               <p className="mt-2 text-xs text-muted">
                 Pause at any moment to see where the shuttle / ball and the players were; slow motion shows a fast shot. The figures follow the tracked foot positions and swing at each of their shots
-                (a walk cycle and a swing, not captured poses). Solid paths are shots whose flight a drag law explains; dashed ones are gravity-only estimates ({estimates} of {flightsShown} shown).
+                (a walk cycle and a swing, not captured poses). Solid paths are shots whose flight a drag law explains; dashed ones are gravity-only estimates ({estimates} of {flightsShown} shown). Every hit has a path; where a player was not tracked at that moment the path starts or ends at their nearest tracked position ({nearest}) or, if they were not tracked at all, at their side's base position ({guessed}), so those paths show where a shot could have gone, not where it did.
                 One camera does not measure height: the heights are reconstructed.
               </p>
             </Card>

@@ -8,6 +8,9 @@ export interface Flight3D {
   t0: number;
   t1: number;
   kind: "physics" | "estimate";
+  placement?: "measured" | "nearest" | "base";      // how the two ends were placed (absent in older payloads = measured)
+  open_end?: boolean;                              // the last hit of a rally with no usable landing after it
+  gap?: boolean;                                   // a gap longer than a flight (a missed hit in between)
   from: [number, number, number];
   to: [number, number, number];
   samples: [number, number, number, number][];   // [t, x, y, z]
