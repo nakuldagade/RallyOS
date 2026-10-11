@@ -58,6 +58,9 @@ export function ErrorBox({ message, onRetry }: { message: string; onRetry?: () =
     <div className="card border-rose-500/40 p-4 text-sm">
       <div className="font-medium text-rose-500">Something went wrong</div>
       <div className="mt-1 text-muted">{message}</div>
+      {/failed to fetch|networkerror|not found|unreachable/i.test(message) && (
+        <div className="mt-1 text-xs text-muted">Is the backend running and up to date? Start it with <code>uvicorn api.main:app --port 8000</code> and refresh.</div>
+      )}
       {onRetry && (
         <button onClick={onRetry} className="btn-ghost mt-3">
           Retry
@@ -68,7 +71,12 @@ export function ErrorBox({ message, onRetry }: { message: string; onRetry?: () =
 }
 
 export function Loading({ label = "Loading…" }: { label?: string }) {
-  return <div className="animate-pulse py-10 text-center text-sm text-muted">{label}</div>;
+  return (
+    <div className="flex items-center justify-center gap-3 py-10 text-sm text-muted" role="status" aria-live="polite">
+      <span className="h-4 w-4 animate-spin rounded-full border-2 border-border border-t-accent" />
+      {label}
+    </div>
+  );
 }
 
 export function MockBanner() {

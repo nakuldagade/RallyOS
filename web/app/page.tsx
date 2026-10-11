@@ -38,11 +38,11 @@ export default function Home() {
 
       <div className="grid gap-6 lg:grid-cols-[1fr_340px]">
         <Card title="Recent matches" actions={<Link href="/matches" className="text-xs text-accent">All matches →</Link>}>
-          {matches.loading ? <Loading /> : matches.error ? <ErrorBox message={matches.error} onRetry={matches.reload} /> : <ManageMatches matches={matches.data ?? []} onChanged={matches.reload} />}
+          {matches.loading ? <Loading /> : matches.error ? <ErrorBox message={matches.error} onRetry={matches.reload} /> : <ManageMatches matches={(matches.data ?? []).slice(0, 6)} onChanged={matches.reload} />}
         </Card>
         <Card title="What's real in this demo">
           <ul className="space-y-2 text-sm">
-            <li><span className="text-emerald-500">●</span> Real logic: scoring rules (6 sports), Glicko-2, matchmaking, predictions, coach grounding, bookings, draws</li>
+            <li><span className="text-emerald-500">●</span> Real logic: scoring rules (6 sports), Glicko-2, matchmaking, predictions, coach grounding, draws</li>
             <li><span className="text-amber-500">●</span> Approximate, shown with confidence: speeds (± band), line calls, shot types</li>
             <li><span className="text-sky-500">●</span> Sample data until the vision pipeline runs: the mock match and tracks</li>
           </ul>
@@ -55,7 +55,7 @@ export default function Home() {
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {FEATURES.map((f) => (
-          <Link key={f.title} href={f.href} className="card p-4 transition hover:border-accent">
+          <Link key={f.title} href={f.href} className="card p-4 transition hover:-translate-y-0.5 hover:border-accent hover:shadow-md">
             <div className="font-medium">{f.title}</div>
             <p className="mt-1 text-sm text-muted">{f.text}</p>
           </Link>
