@@ -43,7 +43,7 @@ export default function ManageMatches({ matches, onChanged }: { matches: MatchSu
 
   return (
     <div>
-      <div className="mb-2 flex flex-wrap items-center gap-2">
+      <div className="mb-3 flex flex-wrap items-center justify-end gap-2">
         {!managing ? (
           <button className="btn-ghost py-1 text-xs" disabled={!removable.length} onClick={() => setManaging(true)}
             title={removable.length ? "Choose analysed videos to remove" : "Nothing to remove"}>Remove videos…</button>
