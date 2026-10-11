@@ -11,13 +11,13 @@ import InsightCard from "@/components/coach/InsightCard";
 
 const SOURCES = [
   { id: "auto", label: "Auto" },
-  { id: "claude", label: "Claude" },
+  { id: "claude", label: "AI model" },
   { id: "template", label: "Offline templates" },
 ] as const;
 
 const SOURCE_TEXT: Record<string, string> = {
   pipeline: "Insights produced by the analysis pipeline.",
-  claude: "Written by Claude from the stats JSON only; every number was checked against it.",
+  claude: "Written by the AI model from the stats JSON only; every number was checked against it.",
   template: "Rule-based templates (works offline, no API key needed).",
 };
 
@@ -55,7 +55,7 @@ export default function ReportPage() {
           ))}
           {report.data && <Badge tone={report.data.source === "claude" ? "blue" : report.data.source === "template" ? "amber" : "green"}>using: {report.data.source}</Badge>}
         </div>
-        {report.data && <p className="mt-2 text-xs text-muted">{SOURCE_TEXT[report.data.source]}{source === "claude" && report.data.source !== "claude" ? " Claude isn't available (no ANTHROPIC_API_KEY on the backend, or offline), so the report fell back." : ""}</p>}
+        {report.data && <p className="mt-2 text-xs text-muted">{SOURCE_TEXT[report.data.source]}{source === "claude" && report.data.source !== "claude" ? " the AI model is not available (no AI_GATEWAY_KEY on the backend, or offline), so the report fell back." : ""}</p>}
       </Card>
       {report.loading ? <Loading label="Building report…" /> : report.error ? <ErrorBox message={report.error} onRetry={report.reload} /> : (
         <div className="space-y-3">

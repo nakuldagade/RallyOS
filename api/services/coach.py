@@ -12,6 +12,7 @@ import re
 from typing import Any
 
 from api.config import settings
+from api.services import llm
 
 log = logging.getLogger(__name__)
 
@@ -177,8 +178,6 @@ def template_insights(data: dict) -> list[dict]:
 
 def claude_insights(data: dict) -> list[dict]:
     """Ask Claude for insights; returns only the ones that pass validation. Raises on API errors."""
-    import anthropic
-
     names = _names(data)
     payload = {
         "sport": data["sport"],
@@ -186,21 +185,11 @@ def claude_insights(data: dict) -> list[dict]:
         "stats": data.get("stats", {}),
         "candidate_clip_t": {str(t): _moments(data, t) for t in names},
     }
-    client = anthropic.Anthropic(api_key=settings.anthropic_key)
-    response = client.beta.messages.create(
-        model=settings.coach_model,
-        max_tokens=16000,
-        betas=["server-side-fallback-2026-07-01"],
-        fallbacks="default",
-        system=SYSTEM_PROMPT,
-        output_config={"format": {"type": "json_schema", "schema": REPORT_SCHEMA}},
-        messages=[{"role": "user", "content": json.dumps(payload, sort_keys=True)}],
-    )
-    if response.stop_reason in ("refusal", "max_tokens"):
-        log.warning("coach: Claude stopped with %s; using templates", response.stop_reason)
-        return []
-    text = next((b.text for b in response.content if b.type == "text"), "")
-    proposed = json.loads(text).get("insights", [])
+    system = SYSTEM_PROMPT + (
+        "\n\nAnswer with ONLY a JSON object of this exact shape, no other text: "
+        '{"insights": [{"player_track_id": 1, "text": "...", "stat_ids": ["per_player.1.x"], "clip_t": [1.2]}]}')
+    text = llm.complete(system, [{"role": "user", "content": json.dumps(payload, sort_keys=True)}], max_tokens=6000, report=True)
+    proposed = llm.parse_json(text).get("insights", [])
     kept = [i for i in proposed if validate_llm(i, data)]
     if len(kept) < len(proposed):
         log.info("coach: rejected %d ungrounded insight(s)", len(proposed) - len(kept))
@@ -225,11 +214,11 @@ def build_report(data: dict, prefer: str = "auto") -> dict:
     stats = data.get("stats", {})
     good = [i for i in data.get("insights", []) if validate(i, stats)] if prefer == "auto" else []
     source = "pipeline"
-    if not good and prefer != "template" and settings.anthropic_key:
+    if not good and prefer != "template" and llm.available():
         try:
             good, source = _cached_claude(data), "claude"
         except Exception as exc:  # network down, bad key, bad JSON -> offline fallback
-            log.warning("coach: Claude unavailable (%s); using templates", exc)
+            log.warning("coach: AI unavailable (%s); using templates", exc)
             good = []
     if not good:
         good, source = template_insights(data), "template"

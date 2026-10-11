@@ -11,7 +11,7 @@ import re
 from sqlmodel import Session
 
 from api.config import settings
-from api.services import coach, player_analysis
+from api.services import coach, llm, player_analysis
 
 log = logging.getLogger(__name__)
 
@@ -121,14 +121,10 @@ def template_answer(question: str, f: dict) -> str:
 
 
 def claude_answer(history: list[dict], f: dict) -> str | None:
-    import anthropic
-
-    client = anthropic.Anthropic(api_key=settings.anthropic_key)
     msgs = [{"role": "user", "content": "FACTS:\n" + json.dumps(f, sort_keys=True)},
             {"role": "assistant", "content": "Understood. Ask me anything about this player."}]
     msgs += [{"role": m["role"], "content": m["content"]} for m in history[-8:]]
-    r = client.messages.create(model=settings.coach_model, max_tokens=600, system=SYSTEM_PROMPT, messages=msgs)
-    text = next((b.text for b in r.content if b.type == "text"), "").strip()
+    text = llm.complete(SYSTEM_PROMPT, msgs, max_tokens=1500)
     return text if text and coach.numbers_grounded(text, f) else None
 
 
@@ -136,12 +132,12 @@ def answer(session: Session, player_id: str, history: list[dict]) -> dict:
     f = facts(session, player_id)
     question = history[-1]["content"] if history else ""
     text, source = None, "template"
-    if settings.anthropic_key and f["summary"]["matches"]:
+    if llm.available() and f["summary"]["matches"]:
         try:
             text = claude_answer(history, f)
             source = "claude"
         except Exception as e:  # network, quota, bad key: the templates still answer
-            log.warning("player chat: Claude failed (%s); using templates", e)
+            log.warning("player chat: AI failed (%s); using templates", e)
     if not text:
         text, source = template_answer(question, f), "template"
     return {"answer": text, "source": source, "match_ids": [m["match_id"] for m in f["matches"]]}

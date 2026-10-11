@@ -7,7 +7,7 @@ import json
 import logging
 
 from api.config import settings
-from api.services import coach
+from api.services import coach, llm
 
 log = logging.getLogger(__name__)
 
@@ -68,16 +68,12 @@ def template(f: dict) -> str:
 
 def summarize(data: dict) -> dict:
     f = facts(data)
-    if settings.anthropic_key:
+    if llm.available():
         try:
-            import anthropic
-
-            r = anthropic.Anthropic(api_key=settings.anthropic_key).messages.create(
-                model=settings.coach_model, max_tokens=500, system=SYSTEM_PROMPT,
-                messages=[{"role": "user", "content": json.dumps(f, sort_keys=True)}])
-            text = next((b.text for b in r.content if b.type == "text"), "").strip()
+            text = llm.complete(SYSTEM_PROMPT, [{"role": "user", "content": json.dumps(f, sort_keys=True)}], max_tokens=1500)
             if text and coach.numbers_grounded(text, f):
                 return {"summary": text, "source": "claude"}
+            log.info("match summary: the AI answer was empty or used a number not in the stats; using the template")
         except Exception as e:
-            log.warning("match summary: Claude failed (%s); using template", e)
+            log.warning("match summary: AI failed (%s); using template", e)
     return {"summary": template(f), "source": "template"}
