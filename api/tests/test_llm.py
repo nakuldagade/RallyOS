@@ -76,3 +76,9 @@ def test_the_chat_falls_back_to_the_template_when_the_gateway_fails(client, matc
     gateway(RuntimeError("gateway down"))
     r = client.post("/v1/players/p_anika/chat", json={"messages": [{"role": "user", "content": "Am I improving?"}]}, headers=headers(client, "anika@rallyos.demo"))
     assert r.status_code == 200 and r.json()["source"] == "template"
+
+
+def test_the_output_limit_is_clamped_to_what_the_gateway_accepts(gateway):
+    sent = gateway("x")
+    llm.complete("sys", [{"role": "user", "content": "hi"}], max_tokens=6000)
+    assert sent[0]["body"]["max_completion_tokens"] == 4000

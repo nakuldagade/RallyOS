@@ -42,7 +42,7 @@ class Settings:
     # Elevate AI gateway (OpenAI Chat Completions): the team key goes in .env as AI_GATEWAY_KEY
     ai_key = os.getenv("AI_GATEWAY_KEY") or os.getenv("TEAM_API_KEY", "")
     ai_url = os.getenv("AI_GATEWAY_URL", "https://elevate1-0.vercel.app/api/ai")
-    ai_model = os.getenv("AI_MODEL", "gpt-5-mini")                    # chat and the match summary
+    ai_model = os.getenv("AI_MODEL", "gpt-5.6-luna")                  # chat and the match summary
     ai_report_model = os.getenv("AI_REPORT_MODEL", "gpt-5.6-luna")    # the full coach report
     coach_model = os.getenv("RALLYOS_COACH_MODEL", "claude-sonnet-5-5")
     mock_fallback = os.getenv("MOCK_FALLBACK", "true").lower() == "true"

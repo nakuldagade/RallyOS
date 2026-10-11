@@ -14,6 +14,7 @@ from api.config import settings
 
 log = logging.getLogger(__name__)
 MAX_REQUEST_BYTES = 48 * 1024
+MAX_OUTPUT_TOKENS = 4000                  # the gateway refuses anything above this
 
 
 def available() -> bool:
@@ -25,16 +26,23 @@ def provider() -> str:
 
 
 def _gateway(system: str, messages: list[dict], max_tokens: int, model: str) -> str:
-    body = {"model": model, "messages": [{"role": "system", "content": system}, *messages], "stream": False}
-    # DeepSeek names the output limit max_tokens, the GPT models max_completion_tokens
-    body["max_tokens" if model.startswith("deepseek") else "max_completion_tokens"] = max_tokens
-    raw = json.dumps(body)
-    if len(raw.encode("utf-8")) > MAX_REQUEST_BYTES:
-        raise ValueError("request larger than the gateway's 48 KB limit")
-    r = httpx.post(settings.ai_url, content=raw, timeout=90.0,
-                   headers={"Authorization": f"Bearer {settings.ai_key}", "Content-Type": "application/json"})
-    r.raise_for_status()
-    return (r.json()["choices"][0]["message"].get("content") or "").strip()
+    """One gateway call. A reasoning model (gpt-5-mini) can spend the whole budget thinking and return nothing
+    (finish_reason "length", empty text): it is asked once more with the largest budget the gateway allows."""
+    for budget in (min(max_tokens, MAX_OUTPUT_TOKENS), MAX_OUTPUT_TOKENS):
+        body = {"model": model, "messages": [{"role": "system", "content": system}, *messages], "stream": False}
+        # DeepSeek names the output limit max_tokens, the GPT models max_completion_tokens
+        body["max_tokens" if model.startswith("deepseek") else "max_completion_tokens"] = budget
+        raw = json.dumps(body)
+        if len(raw.encode("utf-8")) > MAX_REQUEST_BYTES:
+            raise ValueError("request larger than the gateway's 48 KB limit")
+        r = httpx.post(settings.ai_url, content=raw, timeout=90.0,
+                       headers={"Authorization": f"Bearer {settings.ai_key}", "Content-Type": "application/json"})
+        r.raise_for_status()
+        choice = r.json()["choices"][0]
+        text = (choice["message"].get("content") or "").strip()
+        if text or choice.get("finish_reason") != "length" or budget >= MAX_OUTPUT_TOKENS:
+            return text
+    return ""
 
 
 def _anthropic(system: str, messages: list[dict], max_tokens: int) -> str:

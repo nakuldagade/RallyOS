@@ -188,7 +188,7 @@ def claude_insights(data: dict) -> list[dict]:
     system = SYSTEM_PROMPT + (
         "\n\nAnswer with ONLY a JSON object of this exact shape, no other text: "
         '{"insights": [{"player_track_id": 1, "text": "...", "stat_ids": ["per_player.1.x"], "clip_t": [1.2]}]}')
-    text = llm.complete(system, [{"role": "user", "content": json.dumps(payload, sort_keys=True)}], max_tokens=6000, report=True)
+    text = llm.complete(system, [{"role": "user", "content": json.dumps(payload, sort_keys=True)}], max_tokens=4000, report=True)
     proposed = llm.parse_json(text).get("insights", [])
     kept = [i for i in proposed if validate_llm(i, data)]
     if len(kept) < len(proposed):

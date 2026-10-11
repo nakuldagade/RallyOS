@@ -125,7 +125,10 @@ def claude_answer(history: list[dict], f: dict) -> str | None:
             {"role": "assistant", "content": "Understood. Ask me anything about this player."}]
     msgs += [{"role": m["role"], "content": m["content"]} for m in history[-8:]]
     text = llm.complete(SYSTEM_PROMPT, msgs, max_tokens=1500)
-    return text if text and coach.numbers_grounded(text, f) else None
+    if text and coach.numbers_grounded(text, f):
+        return text
+    log.info("player chat: the AI answer was empty or used a number not in the facts: %r", text[:300])
+    return None
 
 
 def answer(session: Session, player_id: str, history: list[dict]) -> dict:
