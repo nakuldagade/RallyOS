@@ -7,6 +7,7 @@ import { useEffect } from "react";
 import { homeFor, useAuth } from "@/lib/auth";
 import { Card, Loading } from "@/components/ui";
 import PlayerProfile from "@/components/player/PlayerProfile";
+import LogoutButton from "@/components/LogoutButton";
 
 export default function MyDashboard() {
   const { user, ready } = useAuth();
@@ -20,6 +21,6 @@ export default function MyDashboard() {
   if (!user.player_id) return <Card title="My dashboard"><p className="text-sm">This account has no player profile yet.</p></Card>;
   return (
     <PlayerProfile id={user.player_id} title={`Welcome, ${user.name}`}
-      actions={<><Link href="/upload" className="btn-ghost">Analyse a match</Link><Link href="/capture" className="btn-ghost">Record live</Link></>} />
+      actions={<><Link href="/upload" className="btn-ghost">Analyse a match</Link><Link href="/capture" className="btn-ghost">Record live</Link><LogoutButton /></>} />
   );
 }

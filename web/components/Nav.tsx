@@ -8,7 +8,7 @@ import { homeFor, useAuth } from "@/lib/auth";
 
 const SECTIONS: { title: string; links: { href: string; label: string }[] }[] = [
   { title: "Analyse", links: [
-    { href: "/", label: "Home" },
+    { href: "/overview", label: "Overview" },
     { href: "/upload", label: "Analyse a match" },
     { href: "/capture", label: "Record live" },
     { href: "/live/demo", label: "Live replay demo" },
@@ -103,14 +103,14 @@ function Account() {
 export default function Nav() {
   const path = usePathname();
   const { user } = useAuth();
-  const active = (href: string) => (href === "/" ? path === "/" : path.startsWith(href));
-  const sections = SECTIONS.map((s) => s.title !== "Improve" ? s : {
+  const active = (href: string) => path.startsWith(href);
+  const sections = SECTIONS.map((s) => s.title !== "Analyse" ? s : {
     ...s, links: [...(user ? [{ href: homeFor(user), label: user.role === "coach" ? "Coach dashboard" : "My dashboard" }] : []), ...s.links],
   });
   return (
     <aside className="border-b border-border bg-card md:sticky md:top-0 md:h-screen md:w-60 md:shrink-0 md:border-b-0 md:border-r">
       <div className="flex h-full flex-col gap-4 p-4">
-        <Link href="/" className="flex items-center gap-2">
+        <Link href={homeFor(user)} className="flex items-center gap-2">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/logo.png" alt="RallyOS" className="h-10 w-10 object-contain dark:invert" />
           <span>

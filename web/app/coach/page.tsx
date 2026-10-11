@@ -10,6 +10,7 @@ import { homeFor, useAuth } from "@/lib/auth";
 import type { CoachRow } from "@/lib/types";
 import { useApi } from "@/lib/useApi";
 import { Badge, Card, ErrorBox, Loading, PageHeader, Stat } from "@/components/ui";
+import LogoutButton from "@/components/LogoutButton";
 
 function PlayerCard({ r, onRemove }: { r: CoachRow; onRemove: () => void }) {
   const l = r.latest;
@@ -79,7 +80,8 @@ export default function CoachPage() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-4">
-      <PageHeader title={`Coach dashboard · ${d.coach.name}`} subtitle="Your roster only. Open a player for their history, heatmap and match-by-match analysis." />
+      <PageHeader title={`Coach dashboard · ${d.coach.name}`} subtitle="Your roster only. Open a player for their history, heatmap and match-by-match analysis."
+        actions={<><Link href="/upload" className="btn-ghost">Analyse a match</Link><LogoutButton /></>} />
       <div className="grid grid-cols-3 gap-3">
         <Stat label="Players on your roster" value={d.totals.players} />
         <Stat label="Matches analysed" value={d.totals.matches} hint="across the roster" />

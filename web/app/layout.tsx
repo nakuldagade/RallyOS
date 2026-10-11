@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import Nav from "@/components/Nav";
+import AppShell from "@/components/AppShell";
 import Providers from "@/components/Providers";
 import "./globals.css";
 
@@ -19,10 +19,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body className="min-h-screen antialiased">
         <Providers>
-          <div className="flex min-h-screen flex-col md:flex-row">
-            <Nav />
-            <main className="min-w-0 flex-1 px-4 py-6 md:px-8">{children}</main>
-          </div>
+          <AppShell>{children}</AppShell>
         </Providers>
       </body>
     </html>
