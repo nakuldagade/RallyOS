@@ -78,6 +78,7 @@ export default function LiveDashboard({ live, sport }: { live: LiveState; sport:
   const closed = live.rallies.length;
   const recent = live.events.slice(-8).reverse();
   const done = live.status === "done";
+  const courtFound = !!live.calibration && (live.calibration.quality === "high" || live.calibration.quality === "check");
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
@@ -90,13 +91,22 @@ export default function LiveDashboard({ live, sport }: { live: LiveState; sport:
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
-        <Card title="Live court" actions={<span className="text-xs text-muted">{live.position ? `at ${fmtTime(live.position.t)}` : "waiting for the first chunk"}</span>}>
-          <MiniCourt sport={sport} dots={dots} className="mx-auto h-[380px] w-full" />
-          <p className="mt-2 text-xs text-muted">
-            Filled dots: players now. Hollow dots: recent hits (yellow) and landings (green IN, red OUT, amber too close). The shuttle is tracked in video pixels
-            {live.ballTrail.length ? ` (${live.ballTrail.length} recent positions)` : ""}; its court position needs the height, which one camera cannot measure.
-          </p>
-        </Card>
+        {courtFound ? (
+          <Card title="Live court" actions={<span className="text-xs text-muted">{live.position ? `at ${fmtTime(live.position.t)}` : "waiting for the first chunk"}</span>}>
+            <MiniCourt sport={sport} dots={dots} className="mx-auto h-[380px] w-full" />
+            <p className="mt-2 text-xs text-muted">
+              Filled dots: players now. Hollow dots: recent hits (yellow) and landings (green IN, red OUT, amber too close). The shuttle is tracked in video pixels
+              {live.ballTrail.length ? ` (${live.ballTrail.length} recent positions)` : ""}; its court position needs the height, which one camera cannot measure.
+            </p>
+          </Card>
+        ) : (
+          <Card title="Finding the court">
+            <p className="text-sm text-muted">
+              {live.calibration ? "No court could be found in the picture yet, so there are no court positions, calls or score. Point the camera so all four corners of the court are visible, or mark the corners before recording."
+                : "The live court appears here as soon as the court is detected in the first chunk."}
+            </p>
+          </Card>
+        )}
 
         <div className="space-y-4">
           <Card title={<span className="flex items-center gap-2">Score suggestion {!done && <Provisional />}</span>}>
