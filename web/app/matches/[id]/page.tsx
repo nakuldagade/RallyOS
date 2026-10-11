@@ -105,6 +105,7 @@ function MatchVision() {
           <div className="mt-2 flex flex-wrap gap-2">
             {m.sport_confidence != null && <Badge tone="green">{sportLabel(m.sport)} detected · {pct(m.sport_confidence)} fit</Badge>}
             {m.calibration.method === "4-tap" && <Badge tone="green" title="Court calibrated from 4 tapped corners">court: 4-tap calibration</Badge>}
+            {m.synthetic && <Badge tone="amber" title="A simulated match made for the demo: not real video, numbers computed from the simulation">Sample data</Badge>}
             <Badge tone="blue" title="SHA-256 of the source video: tamper-evident match record">SHA-256 {shortHash(m.video.sha256)}</Badge>
             <Badge>{m.video.fps} fps · {m.video.width}×{m.video.height}</Badge>
             {m.stats.ball?.tracker === "racketvision" && <Badge tone="amber" title="Shuttle positions from the pretrained RacketVision tracker (inference only)">ball: RacketVision plug-in</Badge>}

@@ -70,6 +70,6 @@ def summarise(data: dict, status: str = "processed", evidence: str = "assisted")
         "games": score.get("games", []), "winner_track_id": score.get("winner_track_id"),
         "confirmed_by_human": score.get("confirmed_by_human", False), "evidence_level": evidence,
         "duration_s": data.get("video", {}).get("duration_s"), "rallies": len(data.get("rallies", [])),
-        "sha256": data.get("video", {}).get("sha256"),
+        "sha256": data.get("video", {}).get("sha256"), "synthetic": bool(data.get("synthetic")),
         "ball_tracker": data.get("stats", {}).get("ball", {}).get("tracker"),
     }

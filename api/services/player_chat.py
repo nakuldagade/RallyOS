@@ -21,6 +21,7 @@ Rules (a validator enforces the first one; an answer that breaks it is discarded
 - Use only numbers that appear in the facts. Never compute, estimate or invent another number.
 - Say so plainly when the data is thin (for example only 1 or 2 matches): do not claim a trend you cannot support.
 - Cover what was asked: how they play, where they position themselves, what is strongest, what to improve (with one concrete drill or focus), and whether they are improving, using 'compare' (verdict better / worse / steady).
+- If sample_data is true, say these are simulated sample matches.
 - Keep it short: at most about 120 words, plain sentences, no markdown headings."""
 
 
@@ -34,7 +35,7 @@ def facts(session: Session, player_id: str) -> dict:
         total = sum(v for row in heat for v in row) or 1.0
         side = {"left_pct": round(100 * left / total), "right_pct": 100 - round(100 * left / total)}
     return {
-        "player": a["player"], "summary": a["summary"],
+        "player": a["player"], "summary": a["summary"], "sample_data": bool(a.get("sample_data")),
         "matches": [{"match_id": r["match_id"], "opponent": r["opponent"], "result": r["result"], "hits": r["hits"],
                      "distance_m": r["distance_m"], "metrics": {k: v for k, v in r["metrics"].items() if v is not None}} for r in a["matches"]],
         "compare": [{k: c[k] for k in ("metric", "label", "unit", "earlier", "latest", "change_pct", "verdict", "n_earlier")} for c in a["compare"]],
@@ -116,7 +117,7 @@ def template_answer(question: str, f: dict) -> str:
             parts.append(f"Improving: {better[0]['label']}.")
         if worse:
             parts.append(f"To work on: {worse[0]['label']}.")
-    return " ".join(parts) + _thin(f)
+    return " ".join(parts) + _thin(f) + (" These are generated sample matches, not real video." if f.get("sample_data") else "")
 
 
 def claude_answer(history: list[dict], f: dict) -> str | None:

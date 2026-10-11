@@ -27,7 +27,7 @@ function Card({ m }: { m: MatchSummary }) {
       <div className={`h-1 ${SPORT_COLOR[m.sport] ?? "bg-accent"}`} />
       <div className="flex flex-1 flex-col gap-4 p-4">
         <div className="flex items-center justify-between gap-2 text-xs">
-          <span className="font-medium uppercase tracking-wide text-muted">{sportLabel(m.sport)}</span>
+          <span className="font-medium uppercase tracking-wide text-muted">{sportLabel(m.sport)}{m.synthetic && <span className="ml-2 rounded bg-amber-500/15 px-1.5 py-0.5 normal-case tracking-normal text-amber-600 dark:text-amber-400" title="A simulated match, not real video">Sample data</span>}</span>
           <span className={verified ? "text-emerald-500" : "text-muted"} title={verified ? "Video verified" : "Analysed from video; scores are suggestions until a person confirms them"}>
             {verified ? "● Verified" : "○ Analysed"}
           </span>

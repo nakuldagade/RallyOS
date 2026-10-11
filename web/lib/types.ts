@@ -227,6 +227,7 @@ export interface HighlightItem {
 }
 
 export interface MatchJSON {
+  synthetic?: boolean;                // sample data: a simulated match, not real video
   schema_version: string;
   match_id: string;
   title?: string | null;
@@ -293,6 +294,7 @@ export interface Tracks {
 }
 
 export interface MatchSummary {
+  synthetic?: boolean;
   match_id: string;
   title?: string | null;
   ball_tracker?: string | null;
@@ -542,6 +544,7 @@ export interface Comparison {
 }
 
 export interface PlayerAnalysis {
+  sample_data?: boolean;
   player: { id: string; name: string; sport: string; rating: number; rd: number };
   summary: { matches: number; analysed_minutes: number; hits: number; distance_m: number; wins: number; losses: number; frames_tracked: number };
   matches: AnalysisMatch[];

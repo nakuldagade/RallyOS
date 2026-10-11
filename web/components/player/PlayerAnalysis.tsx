@@ -197,6 +197,7 @@ export default function PlayerAnalysis({ playerId }: { playerId: string }) {
           </ul>
         </Card>
       </div>
+      {a.sample_data && <p className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">Some of these matches are sample data: simulated games made for the demo, not real video. Their statistics are computed from the simulation.</p>}
       <p className="text-xs text-muted">{a.data_note}</p>
     </div>
   );

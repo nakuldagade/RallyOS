@@ -28,7 +28,7 @@ TOURNAMENTS = [{"name": "Mumbai District Open", "sport": "badminton", "start_dat
 
 DEMO_PASSWORD = "rallyos-demo"          # demo accounts only: change it, or register your own, before showing real data
 COACHES = [{"email": "coach.vikram@rallyos.demo", "name": "Coach Vikram",
-            "roster": ["p_anika", "p_rohan", "p_meera", "p_kabir", "p_isha"]}]       # the one demo coach has every seed player
+            "roster": ["p_anika", "p_rohan", "p_meera", "p_kabir", "p_isha", "p_tara", "p_dev", "p_neel"]}]   # the one demo coach has every seed player (the last three are the table-tennis sample players of api.make_sample_tt, added once they exist)
 RETIRED = ["coach.neha@rallyos.demo"]            # an earlier second demo coach: removed from a database that still has it
 
 

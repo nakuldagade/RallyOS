@@ -64,7 +64,7 @@ def _grid(rows: int, cols: int) -> list[list[float]]:
     return [[0.0] * cols for _ in range(rows)]
 
 
-def _add_track(grid: list[list[float]], tracks: dict, track_id: int, side: str, length: float, width: float) -> int:
+def _add_track(grid: list[list[float]], tracks: dict, track_id: int, side: str, length: float, width: float, clamp: bool = False) -> int:
     n = 0
     rows, cols = len(grid), len(grid[0])
     for fr in tracks.get("frames", []):
@@ -74,6 +74,8 @@ def _add_track(grid: list[list[float]], tracks: dict, track_id: int, side: str, 
         x, y = p["court"]
         if side == "far":                                     # the player's own half is always the near half
             x, y = width - x, length - y
+        if clamp:                                             # a table sport: players stand beside / behind the table, drawn on its edge
+            x, y = min(max(x, 0.0), width - 1e-6), min(max(y, 0.0), length - 1e-6)
         r, c = int(y // CELL_M), int(x // CELL_M)
         if 0 <= r < rows and 0 <= c < cols:
             grid[r][c] += 1
@@ -154,7 +156,7 @@ def analysis(session: Session, player_id: str) -> dict:
         duration = float(data.get("video", {}).get("duration_s") or 0)
         winner = (data.get("score") or {}).get("winner_track_id")
         row = {"match_id": m.id, "date": m.created_at, "sport": data.get("sport"), "duration_s": duration, "side": meta.get("side"),
-               "opponent": opp.name if opp else (other.get("name") or "opponent"), "opponent_id": opp_id,
+               "opponent": opp.name if opp else (other.get("name") or "opponent"), "opponent_id": opp_id, "synthetic": bool(data.get("synthetic")),
                "result": None if winner is None else ("won" if winner == tid else "lost"),
                "hits": stats.get("hits"), "distance_m": stats.get("distance_m"), "metrics": _metrics(stats, duration),
                "shot_mix": stats.get("shot_mix") or {}, "best_shot": stats.get("best_shot")}
@@ -172,7 +174,7 @@ def analysis(session: Session, player_id: str) -> dict:
             continue
         side = meta.get("side") or ("near" if tid == 1 else "far")
         last = k == len(matched) - 1
-        n = _add_track(heat_last if last else heat_early, tracks, tid, side, length, width)
+        n = _add_track(heat_last if last else heat_early, tracks, tid, side, length, width, clamp="surface_height_m" in court)
         frames_total += n
     # the whole-history heatmap is the earlier matches plus the latest one
     for r in range(rows_n):
@@ -195,6 +197,8 @@ def analysis(session: Session, player_id: str) -> dict:
                     "latest": _normalise(heat_last) if any(any(r) for r in heat_last) else None},
         "zones": {z: round(v / zone_w, 3) for z, v in zones.items()} if zone_w else {},
         "shot_mix": shot_mix, "best_shots": best_shots[:5],
+        "sample_data": any(r.get("synthetic") for r in rows),
         "data_note": ("Built from the matches analysed with this player assigned to a side, oldest first (the order they were analysed). "
-                      "Nothing is estimated beyond what each match's analysis measured; a metric is missing where a match could not measure it."),
+                      "Nothing is estimated beyond what each match's analysis measured; a metric is missing where a match could not measure it."
+                      + (" Table-sport heatmaps draw positions beside or behind the table on its edge." if "surface_height_m" in court else "")),
     }

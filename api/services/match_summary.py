@@ -13,7 +13,7 @@ log = logging.getLogger(__name__)
 
 SYSTEM_PROMPT = """You are RallyOS Analyst. You receive the computed facts of ONE analysed racket-sports match as JSON.
 Write a short match summary (about 120 words, plain sentences, no headings): how the match went, who controlled it, how the rallies looked, each player's standout numbers, and what each should work on.
-Use only numbers that appear in the facts; never compute or invent another. If something was not measured, say so."""
+Use only numbers that appear in the facts; never compute or invent another. If something was not measured, say so. If sample_data is true, say first that this is a simulated sample match."""
 
 
 def facts(data: dict) -> dict:
@@ -30,7 +30,7 @@ def facts(data: dict) -> dict:
     score = data.get("score") or {}
     win = score.get("winner_track_id")
     return {
-        "sport": data.get("sport"), "duration_s": round(float((data.get("video") or {}).get("duration_s") or 0)),
+        "sample_data": bool(data.get("synthetic")), "sport": data.get("sport"), "duration_s": round(float((data.get("video") or {}).get("duration_s") or 0)),
         "games": score.get("games") or [], "winner": names.get(win) if win else None,
         "match": data.get("stats", {}).get("match") or {}, "rallies": len(data.get("rallies", [])), "players": players,
         "insights": [i["text"] for i in data.get("insights", [])][:4],
@@ -38,7 +38,8 @@ def facts(data: dict) -> dict:
 
 
 def template(f: dict) -> str:
-    parts = [f"A {f['sport']} match of {f['duration_s']} s with {f['rallies']} rally{'s' if f['rallies'] != 1 else ''} analysed."]
+    parts = ["Sample data: this match is a simulated game made for the demo, not a real video." if f.get("sample_data") else ""]
+    parts += [f"A {str(f['sport']).replace('_', ' ')} match of {f['duration_s']} s with {f['rallies']} {'rally' if f['rallies'] == 1 else 'rallies'} analysed."]
     if f["games"]:
         parts.append("Score " + ", ".join("-".join(str(x) for x in g) for g in f["games"]) + (f"; {f['winner']} won." if f["winner"] else "."))
     else:
@@ -62,7 +63,7 @@ def template(f: dict) -> str:
     parts.extend(f["insights"][:2])
     if f["rallies"] < 3:
         parts.append("This is a short clip, so treat the numbers as indications.")
-    return " ".join(parts)
+    return " ".join(p for p in parts if p)
 
 
 def summarize(data: dict) -> dict:
