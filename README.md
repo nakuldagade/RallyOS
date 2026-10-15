@@ -12,20 +12,14 @@ Developed for **Elevate 1.0 (Problem Statement 02)**.
 
 ## 📸 Screenshots
 
-| **3D Smart Court & Shot Trajectories** | **Match Analysis & Replay** |
-|:---:|:---:|
-| ![3D Smart Court](docs/screenshots/smart-court-3d.png) | ![Match Replay](docs/screenshots/match-replay.png) |
-| *Interactive 3D court with reconstructed physics flight paths and heatmaps* | *Video replay with tracking overlays, rally breakdown, and scoring* |
+<img width="1470" height="860" alt="Screenshot 2026-10-15 at 6 55 28 PM" src="https://github.com/user-attachments/assets/edda18b3-b860-4f6d-8314-7c17b9ac2c88" />
+<img width="1470" height="843" alt="Screenshot 2026-10-15 at 6 56 46 PM" src="https://github.com/user-attachments/assets/50b836dd-1e80-4586-be24-84da8fd0b49d" />
+<img width="1470" height="857" alt="Screenshot 2026-10-15 at 6 57 28 PM" src="https://github.com/user-attachments/assets/3467e8d6-c082-428e-9e3b-f76a8b6c8ae4" />
+<img width="1470" height="855" alt="Screenshot 2026-10-15 at 6 58 44 PM" src="https://github.com/user-attachments/assets/d47197c7-eeab-4d44-9b2e-916ee654d577" />
+<img width="1470" height="851" alt="Screenshot 2026-10-15 at 6 59 24 PM" src="https://github.com/user-attachments/assets/cbc9af6f-a3ed-4a8d-adac-8445a754a7f7" />
+<img width="1470" height="849" alt="Screenshot 2026-10-15 at 6 59 43 PM" src="https://github.com/user-attachments/assets/8620284c-6118-417d-85b7-b220924b3cef" />
 
-| **Live Stream Capture (`/capture`)** | **Movement Intelligence & AI Coach** |
-|:---:|:---:|
-| ![Live Capture](docs/screenshots/live-capture.png) | ![Movement Analytics](docs/screenshots/movement-analytics.png) |
-| *Real-time 5s chunk analysis with progressive live 3D court rendering* | *Grounded AI coaching, return-to-base metrics, and fatigue curves* |
 
-| **Fair-Play Dispute Desk** | **Multi-Sport 3D Courts** |
-|:---:|:---:|
-| ![Dispute Desk](docs/screenshots/dispute-desk.png) | ![Multi-Sport Courts](docs/screenshots/multi-sport.png) |
-| *Line call uncertainty ellipses and instant dispute replays* | *Badminton, Tennis, Table Tennis, Pickleball, Padel, and Squash* |
 
 > *Tip: Drop your UI screenshots into [`docs/screenshots/`](docs/screenshots/) with the filenames above to preview them directly in this README.*
 
