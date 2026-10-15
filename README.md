@@ -10,6 +10,27 @@ Developed for **Elevate 1.0 (Problem Statement 02)**.
 
 ---
 
+## 📸 Screenshots
+
+| **3D Smart Court & Shot Trajectories** | **Match Analysis & Replay** |
+|:---:|:---:|
+| ![3D Smart Court](docs/screenshots/smart-court-3d.png) | ![Match Replay](docs/screenshots/match-replay.png) |
+| *Interactive 3D court with reconstructed physics flight paths and heatmaps* | *Video replay with tracking overlays, rally breakdown, and scoring* |
+
+| **Live Stream Capture (`/capture`)** | **Movement Intelligence & AI Coach** |
+|:---:|:---:|
+| ![Live Capture](docs/screenshots/live-capture.png) | ![Movement Analytics](docs/screenshots/movement-analytics.png) |
+| *Real-time 5s chunk analysis with progressive live 3D court rendering* | *Grounded AI coaching, return-to-base metrics, and fatigue curves* |
+
+| **Fair-Play Dispute Desk** | **Multi-Sport 3D Courts** |
+|:---:|:---:|
+| ![Dispute Desk](docs/screenshots/dispute-desk.png) | ![Multi-Sport Courts](docs/screenshots/multi-sport.png) |
+| *Line call uncertainty ellipses and instant dispute replays* | *Badminton, Tennis, Table Tennis, Pickleball, Padel, and Squash* |
+
+> *Tip: Drop your UI screenshots into [`docs/screenshots/`](docs/screenshots/) with the filenames above to preview them directly in this README.*
+
+---
+
 ## 🌟 Key Features & Innovations
 
 RallyOS replaces multi-camera commercial hardware (like Hawk-Eye or PlaySight) with a single consumer smartphone using **10 training-free techniques**:
@@ -252,11 +273,9 @@ All metrics measured locally on laptop CPU:
 
 ---
 
-## 👥 Contributors
+## 👤 Author & Contributor
 
 - **Nakul Dagade** ([@nakuldagade](https://github.com/nakuldagade))
-- **Prapti Kambli** ([@justPrapti](https://github.com/justPrapti))
-- **Kawaljeet Singh Bharaj** ([@kawaljeet-singh-bharaj](https://github.com/kawaljeet-singh-bharaj))
 
 ---
 
