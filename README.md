@@ -27,8 +27,6 @@ Developed for **Elevate 1.0 (Problem Statement 02)**.
 | ![Dispute Desk](docs/screenshots/dispute-desk.png) | ![Multi-Sport Courts](docs/screenshots/multi-sport.png) |
 | *Line call uncertainty ellipses and instant dispute replays* | *Badminton, Tennis, Table Tennis, Pickleball, Padel, and Squash* |
 
-> *Tip: Drop your UI screenshots into [`docs/screenshots/`](docs/screenshots/) with the filenames above to preview them directly in this README.*
-
 ---
 
 ## 🌟 Key Features & Innovations
